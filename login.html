@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lockdown Calculator - Login</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: #1e1e1e;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            overflow: hidden;
+        }
+        
+        .login-container {
+            background: #252525;
+            border-radius: 12px;
+            padding: 40px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+            max-width: 400px;
+            width: 90%;
+        }
+        
+        h1 {
+            text-align: center;
+            color: #ffffff;
+            margin-bottom: 30px;
+            font-size: 28px;
+        }
+        
+        .role-buttons {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 30px;
+        }
+        
+        button {
+            flex: 1;
+            padding: 15px;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+        }
+        
+        .teacher-btn {
+            background: #0066cc;
+            color: white;
+        }
+        
+        .student-btn {
+            background: #00cc66;
+            color: white;
+        }
+        
+        .input-section {
+            display: none;
+        }
+        
+        .input-section.active {
+            display: block;
+        }
+        
+        input {
+            width: 100%;
+            padding: 15px;
+            border: 2px solid #3a3a3a;
+            background: #1e1e1e;
+            color: #ffffff;
+            border-radius: 8px;
+            font-size: 16px;
+            margin-bottom: 15px;
+            transition: border-color 0.3s;
+        }
+        
+        input:focus {
+            outline: none;
+            border-color: #0066cc;
+        }
+        
+        .submit-btn {
+            width: 100%;
+            background: #0066cc;
+            color: white;
+            margin-bottom: 10px;
+        }
+        
+        .back-btn {
+            width: 100%;
+            background: #3a3a3a;
+            color: white;
+        }
+        
+        .teacher-code {
+            background: #1e1e1e;
+            padding: 20px;
+            border-radius: 8px;
+            text-align: center;
+            margin-bottom: 20px;
+            border: 2px solid #0066cc;
+        }
+        
+        .teacher-code h2 {
+            font-size: 16px;
+            color: #888;
+            margin-bottom: 10px;
+        }
+        
+        .code-display {
+            font-size: 36px;
+            font-weight: bold;
+            color: #0066cc;
+            letter-spacing: 5px;
+            font-family: 'Courier New', monospace;
+        }
+        
+        .info-text {
+            text-align: center;
+            color: #888;
+            font-size: 14px;
+            margin-bottom: 20px;
+        }
+        
+        .error-text {
+            color: #cc0000;
+            text-align: center;
+            margin-bottom: 15px;
+            font-size: 14px;
+        }
+        
+        .student-name-input {
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="login-container">
+        <h1>Desmos Calculator</h1>
+        
+        <div id="role-selection" class="input-section active">
+            <p class="info-text">Choose your role to continue</p>
+            <div class="role-buttons">
+                <button class="teacher-btn" onclick="selectRole('teacher')">Teacher</button>
+                <button class="student-btn" onclick="selectRole('student')">Student</button>
+            </div>
+        </div>
+        
+        <div id="teacher-section" class="input-section">
+            <div class="teacher-code">
+                <h2>Your Class Code:</h2>
+                <div class="code-display" id="class-code"></div>
+            </div>
+            <p class="info-text">Share this code with your students</p>
+            <button class="submit-btn" onclick="startTeacher()">Start Teaching</button>
+            <button class="back-btn" onclick="goBack()">Back</button>
+        </div>
+        
+        <div id="student-section" class="input-section">
+            <p class="info-text">Enter the class code provided by your teacher</p>
+            <div id="error-message" class="error-text"></div>
+            <div class="student-name-input">
+                <input 
+                    type="text" 
+                    id="student-name" 
+                    placeholder="Your Name" 
+                    maxlength="30"
+                >
+            </div>
+            <input 
+                type="text" 
+                id="server-address" 
+                placeholder="Server Address" 
+                value="https://lockdown-calculator.vercel.app/"
+            >
+            <div style="font-size: 11px; color: #999; margin-top: -10px; margin-bottom: 10px; text-align: center;">
+                Or use localhost:3000 for local network
+            </div>
+            <input 
+                type="text" 
+                id="student-code" 
+                placeholder="Enter Class Code" 
+                maxlength="6"
+                style="text-transform: uppercase;"
+            >
+            <button class="submit-btn" onclick="joinClass()">Join Class</button>
+            <button class="back-btn" onclick="goBack()">Back</button>
+        </div>
+    </div>
+
+    <script src="https://cdn.socket.io/4.6.0/socket.io.min.js"></script>
+    <script>
+        const { ipcRenderer } = require('electron');
+        
+        let currentClassCode = '';
+        let socket = null;
+        let serverAddress = 'https://lockdown-calculator.vercel.app/';
+        
+        function initSocket(customAddress = null) {
+            if (socket && socket.connected) {
+                socket.disconnect();
+            }
+            
+            const address = customAddress || serverAddress;
+            const url = address.startsWith('http') ? address : `http://${address}`;
+            
+            socket = io(url, {
+                reconnection: true,
+                reconnectionDelay: 1000,
+                reconnectionDelayMax: 5000,
+                reconnectionAttempts: 5,
+                transports: ['polling', 'websocket']
+            });
+            
+            socket.on('connect', () => {
+                console.log('Login page connected to server:', url);
+            });
+            
+            socket.on('connect_error', (error) => {
+                console.error('Connection error:', error);
+            });
+        }
+        
+        function generateClassCode() {
+            const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+            let code = '';
+            for (let i = 0; i < 6; i++) {
+                code += chars.charAt(Math.floor(Math.random() * chars.length));
+            }
+            return code;
+        }
+        
+        function selectRole(role) {
+            document.getElementById('role-selection').classList.remove('active');
+            
+            if (role === 'teacher') {
+                currentClassCode = generateClassCode();
+                document.getElementById('class-code').textContent = currentClassCode;
+                document.getElementById('teacher-section').classList.add('active');
+            } else {
+                document.getElementById('student-section').classList.add('active');
+            }
+        }
+        
+        function goBack() {
+            document.getElementById('teacher-section').classList.remove('active');
+            document.getElementById('student-section').classList.remove('active');
+            document.getElementById('role-selection').classList.add('active');
+            document.getElementById('error-message').textContent = '';
+            document.getElementById('student-code').value = '';
+        }
+        
+        function startTeacher() {
+            ipcRenderer.send('start-app', { role: 'teacher', code: currentClassCode });
+        }
+        
+        function joinClass() {
+            const serverAddr = document.getElementById('server-address').value.trim();
+            const enteredCode = document.getElementById('student-code').value.toUpperCase().trim();
+            const studentName = document.getElementById('student-name').value.trim();
+            const errorEl = document.getElementById('error-message');
+            
+            if (!serverAddr) {
+                errorEl.textContent = 'Please enter the server address';
+                return;
+            }
+            
+            if (!studentName) {
+                errorEl.textContent = 'Please enter your name';
+                return;
+            }
+            
+            if (!enteredCode) {
+                errorEl.textContent = 'Please enter a class code';
+                return;
+            }
+            
+            errorEl.textContent = '';
+            serverAddress = serverAddr;
+            
+            // Initialize socket with the specified server address
+            initSocket(serverAddress);
+            
+            // Wait for socket to be ready
+            const checkSocket = setInterval(() => {
+                if (socket && socket.connected) {
+                    clearInterval(checkSocket);
+                    validateAndJoin(enteredCode, studentName, errorEl);
+                }
+            }, 100);
+            
+            // Timeout after 3 seconds
+            setTimeout(() => {
+                clearInterval(checkSocket);
+                if (!socket || !socket.connected) {
+                    errorEl.textContent = 'Cannot connect to server';
+                }
+            }, 3000);
+        
+        
+        function validateAndJoin(code, studentName, errorEl) {
+            console.log('Validating class code:', code);
+            
+            socket.emit('validate-class-code', code, (isValid) => {
+                console.log('Validation result:', isValid);
+                
+                if (isValid) {
+                    // Class exists and teacher is hosting it
+                    ipcRenderer.send('start-app', { 
+                        role: 'student', 
+                        code: code,
+                        studentName: studentName,
+                        serverAddress: serverAddress
+                    });
+                } else {
+                    errorEl.textContent = 'Class code does not exist or teacher is not online';
+                }
+            });
+        }
+        
+        // Handle Enter key in student code input
+        document.addEventListener('DOMContentLoaded', () => {
+            const studentInput = document.getElementById('student-code');
+            if (studentInput) {
+                studentInput.addEventListener('keypress', (e) => {
+                    if (e.key === 'Enter') {
+                        joinClass();
+                    }
+                });
+                
+                // Auto-uppercase input
+                studentInput.addEventListener('input', (e) => {
+                    e.target.value = e.target.value.toUpperCase();
+                });
+            }
+        });
+        
+        // Initialize socket when page loads
+        window.addEventListener('load', () => {
+            setTimeout(initSocket, 500);
+        });
+    }
+    </script>
+</body>
+</html>

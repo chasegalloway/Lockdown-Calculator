@@ -1,0 +1,506 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Teacher Dashboard</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #1e1e1e;
+            color: #ffffff;
+            height: 100vh;
+            display: flex;
+        }
+        
+        .sidebar {
+            width: 300px;
+            background: #252525;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            border-right: 1px solid #3a3a3a;
+        }
+        
+        .main-content {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .header {
+            background: #252525;
+            padding: 20px 30px;
+            border-bottom: 1px solid #3a3a3a;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .class-code-display {
+            background: #0066cc;
+            padding: 15px 25px;
+            border-radius: 8px;
+            font-size: 24px;
+            font-weight: bold;
+            letter-spacing: 3px;
+        }
+        
+        .student-count {
+            font-size: 16px;
+            color: #888;
+        }
+        
+        .calculator-container {
+            flex: 1;
+            position: relative;
+        }
+        
+        #teacher-calculator {
+            width: 100%;
+            height: 100%;
+            border: none;
+        }
+        
+        .student-list {
+            margin-top: 20px;
+            flex: 1;
+            overflow-y: auto;
+        }
+        
+        .student-item {
+            background: #1e1e1e;
+            padding: 12px;
+            margin-bottom: 8px;
+            border-radius: 6px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .student-name {
+            font-weight: 500;
+        }
+        
+        .student-status {
+            width: 8px;
+            height: 8px;
+            background: #00cc66;
+            border-radius: 50%;
+        }
+        
+        .control-panel {
+            margin-top: 20px;
+            padding-top: 20px;
+            border-top: 1px solid #3a3a3a;
+        }
+        
+        .control-btn {
+            width: 100%;
+            padding: 12px;
+            margin-bottom: 10px;
+            border: none;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: opacity 0.2s;
+        }
+        
+        .control-btn:hover {
+            opacity: 0.8;
+        }
+        
+        .btn-primary {
+            background: #0066cc;
+            color: white;
+        }
+        
+        .btn-danger {
+            background: #cc0000;
+            color: white;
+        }
+        
+        .btn-success {
+            background: #00cc66;
+            color: white;
+        }
+        
+        .btn-warning {
+            background: #ff9500;
+            color: white;
+        }
+        
+        .context-menu {
+            position: fixed;
+            background: #252525;
+            border: 1px solid #3a3a3a;
+            border-radius: 6px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+            z-index: 10000;
+            display: none;
+            min-width: 150px;
+        }
+        
+        .context-menu.show {
+            display: block;
+        }
+        
+        .context-menu-item {
+            padding: 10px 15px;
+            color: #fff;
+            cursor: pointer;
+            border-bottom: 1px solid #3a3a3a;
+            font-size: 13px;
+            transition: background 0.2s;
+        }
+        
+        .context-menu-item:last-child {
+            border-bottom: none;
+        }
+        
+        .context-menu-item:hover {
+            background: #3a3a3a;
+        }
+        
+        .context-menu-item.danger {
+            color: #ff4444;
+        }
+        
+        h2 {
+            font-size: 18px;
+            margin-bottom: 15px;
+        }
+        
+        h3 {
+            font-size: 14px;
+            margin-bottom: 10px;
+            color: #888;
+        }
+        
+        .info-text {
+            color: #888;
+            font-size: 12px;
+            margin-bottom: 15px;
+        }
+    </style>
+</head>
+<body>
+    <div class="sidebar">
+        <h2>Teacher Dashboard</h2>
+        <div class="info-text">Your class code:</div>
+        <div class="class-code-display" id="class-code">------</div>
+        <div style="margin-top: 10px; padding: 10px; background: #1e1e1e; border-radius: 5px; font-size: 12px;">
+            <div style="color: #999; margin-bottom: 5px;">Server Address:</div>
+            <div id="server-address" style="color: #0066cc; font-family: monospace; word-break: break-all;">Loading...</div>
+        </div>
+        
+        <h3 style="margin-top: 20px;">Students (<span id="student-count">0</span>)</h3>
+        <div class="student-list" id="student-list">
+            <div style="color: #666; text-align: center; padding: 20px;">
+                Waiting for students...
+            </div>
+        </div>
+        
+        <div class="control-panel">
+            <h3>Controls</h3>
+            <button class="control-btn btn-primary" onclick="syncToStudents()">
+                Sync to All Students
+            </button>
+            <button class="control-btn btn-success" onclick="clearAllStudents()">
+                Clear All Students
+            </button>
+            <button class="control-btn btn-danger" onclick="lockAllStudents()">
+                Lock All Students
+            </button>
+            <button class="control-btn btn-success" onclick="unlockAllStudents()">
+                Unlock All Students
+            </button>
+        </div>
+    </div>
+    
+    <div class="main-content">
+        <div class="header">
+            <h1>Teacher View</h1>
+            <div class="student-count">
+                <span id="student-count-header">0</span> students connected
+            </div>
+        </div>
+        <div class="calculator-container">
+            <iframe 
+                id="teacher-calculator" 
+                src="https://www.desmos.com/calculator"
+                frameborder="0">
+            </iframe>
+        </div>
+    </div>
+
+    <script src="https://cdn.socket.io/4.6.0/socket.io.min.js"></script>
+    <div class="context-menu" id="context-menu"></div>
+    <script>
+        const { ipcRenderer } = require('electron');
+        const os = require('os');
+        
+        let socket = null;
+        let classCode = '';
+        let students = [];
+        
+        // Display local IP addresses for students to connect to
+        function displayServerAddress() {
+            const interfaces = os.networkInterfaces();
+            const addresses = [];
+            
+            for (const name of Object.keys(interfaces)) {
+                for (const iface of interfaces[name]) {
+                    // Skip internal (loopback) and non-IPv4 addresses
+                    if (iface.family === 'IPv4' && !iface.internal) {
+                        addresses.push(`${iface.address}:3000`);
+                    }
+                }
+            }
+            
+            const addressEl = document.getElementById('server-address');
+            if (addresses.length > 0) {
+                addressEl.innerHTML = addresses.map(addr => 
+                    `<div style="margin-bottom: 3px;">${addr}</div>`
+                ).join('');
+            } else {
+                addressEl.textContent = 'localhost:3000 (local only)';
+            }
+        }
+        
+        function initSocket() {
+            socket = io('http://localhost:3000', {
+                reconnection: true,
+                reconnectionDelay: 1000,
+                reconnectionDelayMax: 5000,
+                reconnectionAttempts: 10,
+                transports: ['polling', 'websocket']
+            });
+            
+            socket.on('connect', () => {
+                console.log('Teacher: Connected to server');
+                displayServerAddress();
+            });
+            
+            socket.on('connect_error', (error) => {
+                console.error('Teacher: Connection error:', error);
+            });
+            
+            socket.on('class-created', (data) => {
+                console.log('Teacher: Class created:', data.classCode);
+            });
+            
+            socket.on('student-joined', (data) => {
+                students = data.allStudents || [];
+                updateStudentList();
+                console.log('Teacher: Students updated:', students);
+            });
+            
+            socket.on('student-left', (data) => {
+                students = data.allStudents || [];
+                updateStudentList();
+            });
+        }
+        
+        // Get class code from main process
+        ipcRenderer.on('init-teacher', (event, data) => {
+            classCode = data.classCode;
+            document.getElementById('class-code').textContent = classCode;
+            
+            // Wait a moment for socket to be ready, then create class
+            setTimeout(() => {
+                if (!socket) initSocket();
+                
+                socket.emit('create-class', {
+                    classCode: classCode,
+                    teacherName: 'Teacher'
+                });
+            }, 1000);
+        });
+        
+        function updateStudentList() {
+            const count = students.length;
+            document.getElementById('student-count').textContent = count;
+            document.getElementById('student-count-header').textContent = count;
+            
+            const listEl = document.getElementById('student-list');
+            
+            if (count === 0) {
+                listEl.innerHTML = '<div style="color: #666; text-align: center; padding: 20px;">Waiting for students...</div>';
+                return;
+            }
+            
+            listEl.innerHTML = students.map(student => `
+                <div class="student-item" data-student-id="${student.id}" oncontextmenu="showStudentMenu(event, '${student.id}', '${student.name}')">
+                    <span class="student-name">${student.name}</span>
+                    <span class="student-status"></span>
+                </div>
+            `).join('');
+        }
+        
+        function syncToStudents() {
+            console.log('syncToStudents called, socket:', socket ? 'exists' : 'null');
+            if (!socket) {
+                console.error('Socket not initialized');
+                return;
+            }
+            console.log('Emitting broadcast-to-students: sync-state');
+            socket.emit('broadcast-to-students', {
+                type: 'sync-state',
+                message: 'Teacher is syncing calculator state'
+            });
+            alert('Calculator state synced to all students');
+        }
+        
+        function clearAllStudents() {
+            console.log('clearAllStudents called, socket:', socket ? 'exists' : 'null');
+            if (!socket) {
+                console.error('Socket not initialized');
+                return;
+            }
+            console.log('Emitting broadcast-to-students: clear-calculator');
+            socket.emit('broadcast-to-students', {
+                type: 'clear-calculator'
+            });
+            alert('All student calculators cleared');
+        }
+        
+        function lockAllStudents() {
+            console.log('lockAllStudents called, socket:', socket ? 'exists' : 'null');
+            if (!socket) {
+                console.error('Socket not initialized');
+                return;
+            }
+            console.log('Emitting broadcast-to-students: lock-calculator');
+            socket.emit('broadcast-to-students', {
+                type: 'lock-calculator',
+                locked: true
+            });
+            alert('All student calculators locked');
+        }
+        
+        function unlockAllStudents() {
+            console.log('unlockAllStudents called, socket:', socket ? 'exists' : 'null');
+            if (!socket) {
+                console.error('Socket not initialized');
+                return;
+            }
+            console.log('Emitting broadcast-to-students: unlock-calculator');
+            socket.emit('broadcast-to-students', {
+                type: 'unlock-calculator',
+                locked: false
+            });
+            alert('All student calculators unlocked');
+        }
+        
+        function showStudentMenu(event, studentId, studentName) {
+            event.preventDefault();
+            const contextMenu = document.getElementById('context-menu');
+            
+            contextMenu.innerHTML = `
+                <div class="context-menu-item" onclick="lockStudent('${studentId}', '${studentName}')">
+                    🔒 Lock Student
+                </div>
+                <div class="context-menu-item" onclick="unlockStudent('${studentId}', '${studentName}')">
+                    🔓 Unlock Student
+                </div>
+                <div class="context-menu-item" onclick="clearStudent('${studentId}', '${studentName}')">
+                    🗑️ Clear Calculator
+                </div>
+                <div class="context-menu-item danger" onclick="kickStudent('${studentId}', '${studentName}')">
+                    ❌ Kick Student
+                </div>
+            `;
+            
+            contextMenu.classList.add('show');
+            contextMenu.style.left = event.clientX + 'px';
+            contextMenu.style.top = event.clientY + 'px';
+        }
+        
+        function lockStudent(studentId, studentName) {
+            console.log('lockStudent called for', studentName, 'socket:', socket ? 'exists' : 'null');
+            if (!socket) {
+                console.error('Socket not initialized');
+                return;
+            }
+            console.log('Emitting send-to-student: lock-calculator to', studentId);
+            socket.emit('send-to-student', {
+                studentId: studentId,
+                command: { type: 'lock-calculator' }
+            });
+            alert(`${studentName}'s calculator locked`);
+            hideContextMenu();
+        }
+        
+        function unlockStudent(studentId, studentName) {
+            console.log('unlockStudent called for', studentName, 'socket:', socket ? 'exists' : 'null');
+            if (!socket) {
+                console.error('Socket not initialized');
+                return;
+            }
+            console.log('Emitting send-to-student: unlock-calculator to', studentId);
+            socket.emit('send-to-student', {
+                studentId: studentId,
+                command: { type: 'unlock-calculator' }
+            });
+            alert(`${studentName}'s calculator unlocked`);
+            hideContextMenu();
+        }
+        
+        function clearStudent(studentId, studentName) {
+            console.log('clearStudent called for', studentName, 'socket:', socket ? 'exists' : 'null');
+            if (!socket) {
+                console.error('Socket not initialized');
+                return;
+            }
+            console.log('Emitting send-to-student: clear-calculator to', studentId);
+            socket.emit('send-to-student', {
+                studentId: studentId,
+                command: { type: 'clear-calculator' }
+            });
+            alert(`${studentName}'s calculator cleared`);
+            hideContextMenu();
+        }
+        
+        function kickStudent(studentId, studentName) {
+            if (!confirm(`Kick ${studentName} from the class?`)) return;
+            console.log('kickStudent called for', studentName, 'socket:', socket ? 'exists' : 'null');
+            if (!socket) {
+                console.error('Socket not initialized');
+                return;
+            }
+            console.log('Emitting send-to-student: kick-student to', studentId);
+            socket.emit('send-to-student', {
+                studentId: studentId,
+                command: { type: 'kick-student', message: 'You have been kicked from the class' }
+            });
+            alert(`${studentName} kicked`);
+            hideContextMenu();
+        }
+        
+        function hideContextMenu() {
+            const contextMenu = document.getElementById('context-menu');
+            contextMenu.classList.remove('show');
+        }
+        
+        // Hide context menu on click
+        document.addEventListener('click', () => {
+            hideContextMenu();
+        });
+        
+        // Initialize socket on page load
+        window.addEventListener('load', () => {
+            setTimeout(() => {
+                if (!socket) initSocket();
+            }, 500);
+        });
+    </script>
+</body>
+</html>

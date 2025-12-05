@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Student - Lockdown Calculator</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #000;
+            overflow: hidden;
+        }
+        
+        .status-bar {
+            background: #1e1e1e;
+            color: #fff;
+            padding: 10px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 2px solid #0066cc;
+        }
+        
+        .status-indicator {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .status-dot {
+            width: 10px;
+            height: 10px;
+            background: #00cc66;
+            border-radius: 50%;
+            animation: pulse 2s infinite;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        
+        .class-info {
+            font-size: 14px;
+            color: #888;
+        }
+        
+        #calculator {
+            width: 100%;
+            height: calc(100vh - 44px);
+            border: none;
+        }
+        
+        /* Hide Desmos auth buttons via CSS injection */
+        #calculator::before {
+            content: '';
+        }
+        
+        .notification {
+            position: fixed;
+            top: 60px;
+            right: 20px;
+            background: #0066cc;
+            color: white;
+            padding: 15px 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+            display: none;
+            z-index: 1000;
+        }
+        
+        .notification.show {
+            display: block;
+            animation: slideIn 0.3s ease-out;
+        }
+        
+        @keyframes slideIn {
+            from {
+                transform: translateX(400px);
+                opacity: 0;
+            }
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="status-bar">
+        <div class="status-indicator">
+            <div class="status-dot"></div>
+            <span>Connected to Class</span>
+        </div>
+        <div class="class-info">
+            Class Code: <strong id="class-code">------</strong>
+        </div>
+    </div>
+    
+    <iframe 
+        id="calculator" 
+        src="https://www.desmos.com/calculator"
+        frameborder="0"
+        allowfullscreen>
+    </iframe>
+    
+    <div class="notification" id="notification"></div>
+
+    <script src="https://cdn.socket.io/4.6.0/socket.io.min.js"></script>
+    <script>
+        const { ipcRenderer } = require('electron');
+        
+        let socket = null;
+        let classCode = '';
+        let studentName = '';
+        let serverAddress = 'https://lockdown-calculator.vercel.app/';
+        
+        function initSocket() {
+            const url = serverAddress.startsWith('http') ? serverAddress : `http://${serverAddress}`;
+            socket = io(url, {
+                reconnection: true,
+                reconnectionDelay: 1000,
+                reconnectionDelayMax: 5000,
+                reconnectionAttempts: 10,
+                transports: ['polling', 'websocket']
+            });
+            
+            socket.on('connect', () => {
+                console.log('Connected to server');
+                // Join class after connecting
+                socket.emit('join-class', {
+                    classCode: classCode,
+                    studentName: studentName
+                });
+            });
+            
+            socket.on('join-success', (data) => {
+                console.log('Successfully joined class');
+                showNotification('Connected to class!');
+                hideDesmosAuthButtons();
+            });
+            
+            socket.on('join-error', (data) => {
+                console.error('Failed to join class:', data.message);
+                showNotification('Error: ' + data.message);
+                // Redirect back to login after 3 seconds
+                setTimeout(() => {
+                    console.log('Redirecting back to login...');
+                    ipcRenderer.send('close-student-window');
+                }, 3000);
+            });
+            
+            // Listen for teacher commands
+            socket.on('teacher-command', (command) => {
+                console.log('=== TEACHER COMMAND RECEIVED ===');
+                console.log('Command received:', command);
+                console.log('Command type:', command.type);
+                
+                switch(command.type) {
+                    case 'sync-state':
+                        console.log('Processing sync-state command');
+                        showNotification('Teacher synced calculator');
+                        break;
+                        
+                    case 'clear-calculator':
+                        console.log('Processing clear-calculator command');
+                        showNotification('Teacher cleared your calculator');
+                        // Reload the calculator iframe to clear it
+                        const currentSrc = document.getElementById('calculator').src;
+                        document.getElementById('calculator').src = currentSrc;
+                        break;
+                        
+                    case 'lock-calculator':
+                        console.log('Processing lock-calculator command');
+                        showNotification('Calculator locked by teacher');
+                        ipcRenderer.send('set-student-lock', true);
+                        lockCalculator();
+                        break;
+                        
+                    case 'unlock-calculator':
+                        console.log('=== UNLOCK COMMAND PROCESSING ===');
+                        console.log('Unlock command received, unlocking calculator');
+                        showNotification('Calculator unlocked - you can now leave');
+                        ipcRenderer.send('set-student-lock', false);
+                        unlockCalculator();
+                        console.log('Unlock function called, calculator unlocked, window restrictions removed');
+                        break;
+                        
+                    case 'kick-student':
+                        console.log('Processing kick-student command');
+                        showNotification(command.message || 'You have been kicked from class');
+                        setTimeout(() => {
+                            ipcRenderer.send('close-student-window');
+                        }, 1500);
+                        break;
+                        
+                    default:
+                        console.log('Unknown command type:', command.type);
+                }
+                console.log('=== COMMAND PROCESSING COMPLETE ===');
+            });
+            
+            socket.on('teacher-disconnected', () => {
+                showNotification('Teacher has disconnected');
+            });
+            
+            socket.on('settings-updated', (settings) => {
+                console.log('Settings updated:', settings);
+            });
+            
+            socket.on('connect_error', (error) => {
+                console.error('Connection error:', error);
+            });
+        }
+        
+        // Get student info from main process
+        ipcRenderer.on('init-student', (event, data) => {
+            classCode = data.classCode;
+            studentName = data.studentName || 'Student';
+            serverAddress = data.serverAddress || 'localhost:3000';
+            document.getElementById('class-code').textContent = classCode;
+            console.log('Connecting to server:', serverAddress);
+            
+            // Initialize socket
+            setTimeout(() => {
+                initSocket();
+            }, 500);
+        });
+        
+        function showNotification(message) {
+            const notification = document.getElementById('notification');
+            notification.textContent = message;
+            notification.classList.add('show');
+            
+            setTimeout(() => {
+                notification.classList.remove('show');
+            }, 3000);
+        }
+        
+        function lockCalculator() {
+            // Do nothing - locking is handled at window level
+            console.log('Lock applied at window level');
+        }
+        
+        function unlockCalculator() {
+            // Do nothing - unlocking is handled at window level
+            console.log('Unlock applied at window level');
+        }
+        
+        function hideDesmosAuthButtons() {
+            const calc = document.getElementById('calculator');
+            
+            const injectStyles = () => {
+                try {
+                    const iframeDoc = calc.contentDocument || calc.contentWindow.document;
+                    if (!iframeDoc) return;
+                    
+                    // Hide login/signup buttons
+                    const style = iframeDoc.createElement('style');
+                    style.textContent = `
+                        [data-testid="auth-buttons"],
+                        [data-testid="login-button"],
+                        [data-testid="signup-button"],
+                        button[aria-label*="Log in"],
+                        button[aria-label*="Sign up"],
+                        button[aria-label*="login"],
+                        button[aria-label*="signup"],
+                        .dcg-auth-buttons,
+                        .dcg-login-button,
+                        .dcg-signup-button {
+                            display: none !important;
+                        }
+                    `;
+                    iframeDoc.head.appendChild(style);
+                    console.log('Auth buttons hidden');
+                } catch (e) {
+                    console.log('Cannot inject styles (CORS):', e);
+                }
+            };
+            
+            // Try immediately
+            injectStyles();
+            
+            // Try again after iframe loads
+            if (calc.contentWindow) {
+                calc.contentWindow.addEventListener('load', injectStyles, false);
+            }
+            
+            // Keep trying
+            setTimeout(injectStyles, 1000);
+            setTimeout(injectStyles, 2000);
+            setTimeout(injectStyles, 3000);
+        }
+        // Initialize on page load if not already done
+        window.addEventListener('load', () => {
+            setTimeout(() => {
+                if (!socket) initSocket();
+                // Also try to hide buttons on page load
+                setTimeout(hideDesmosAuthButtons, 1000);
+            }, 500);
+        });
+    </script>
+</body>
+</html>
