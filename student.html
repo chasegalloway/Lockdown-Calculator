@@ -119,7 +119,7 @@
         let socket = null;
         let classCode = '';
         let studentName = '';
-        let serverAddress = 'https://lockdown-calculator.vercel.app/';
+        let serverAddress = 'https://lockdown-calculator-eno1g1p0g-chasegalloways-projects.vercel.app';
         
         function initSocket() {
             const url = serverAddress.startsWith('http') ? serverAddress : `http://${serverAddress}`;
@@ -128,7 +128,7 @@
                 reconnectionDelay: 1000,
                 reconnectionDelayMax: 5000,
                 reconnectionAttempts: 10,
-                transports: ['polling', 'websocket']
+                transports: ['polling']
             });
             
             socket.on('connect', () => {

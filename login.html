@@ -186,7 +186,7 @@
                 type="text" 
                 id="server-address" 
                 placeholder="Server Address" 
-                value="https://lockdown-calculator.vercel.app/"
+                value="https://lockdown-calculator-eno1g1p0g-chasegalloways-projects.vercel.app"
             >
             <div style="font-size: 11px; color: #999; margin-top: -10px; margin-bottom: 10px; text-align: center;">
                 Or use localhost:3000 for local network
@@ -209,7 +209,7 @@
         
         let currentClassCode = '';
         let socket = null;
-        let serverAddress = 'https://lockdown-calculator.vercel.app/';
+        let serverAddress = 'https://lockdown-calculator-eno1g1p0g-chasegalloways-projects.vercel.app';
         
         function initSocket(customAddress = null) {
             if (socket && socket.connected) {
@@ -224,7 +224,7 @@
                 reconnectionDelay: 1000,
                 reconnectionDelayMax: 5000,
                 reconnectionAttempts: 5,
-                transports: ['polling', 'websocket']
+                transports: ['polling']
             });
             
             socket.on('connect', () => {

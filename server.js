@@ -10,11 +10,13 @@ const io = socketIO(server, {
     origin: "*",
     methods: ["GET", "POST"]
   },
-  transports: ['polling', 'websocket'],
-  allowEIO3: true
+  transports: ['polling'],
+  allowEIO3: true,
+  pingTimeout: 60000,
+  pingInterval: 25000
 });
 
-const PORT = 3000;
+const PORT = process.env.PORT || 3000;
 
 // Serve static files
 app.use(express.static(path.join(__dirname, 'public')));
@@ -236,3 +238,6 @@ server.listen(PORT, () => {
   console.log(`Server running on http://localhost:${PORT}`);
   console.log('WebSocket server ready for connections');
 });
+
+// Export for Vercel serverless
+module.exports = app;
