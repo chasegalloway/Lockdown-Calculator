@@ -172,7 +172,7 @@
         </div>
         
         <div id="student-section" class="input-section">
-            <p class="info-text">Enter the class code provided by your teacher</p>
+            <p class="info-text">Enter the server address and class code</p>
             <div id="error-message" class="error-text"></div>
             <div class="student-name-input">
                 <input 
@@ -185,11 +185,11 @@
             <input 
                 type="text" 
                 id="server-address" 
-                placeholder="Server Address" 
-                value="https://lockdown-calculator-eno1g1p0g-chasegalloways-projects.vercel.app"
+                placeholder="Server Address (teacher's URL)" 
+                value="http://localhost:3000"
             >
             <div style="font-size: 11px; color: #999; margin-top: -10px; margin-bottom: 10px; text-align: center;">
-                Or use localhost:3000 for local network
+                Ask your teacher for the server address
             </div>
             <input 
                 type="text" 
@@ -209,7 +209,7 @@
         
         let currentClassCode = '';
         let socket = null;
-        let serverAddress = 'https://lockdown-calculator-eno1g1p0g-chasegalloways-projects.vercel.app';
+        let serverAddress = 'https://lockdown-calculator.onrender.com/';
         
         function initSocket(customAddress = null) {
             if (socket && socket.connected) {
@@ -266,7 +266,11 @@
         }
         
         function startTeacher() {
-            ipcRenderer.send('start-app', { role: 'teacher', code: currentClassCode });
+            ipcRenderer.send('start-app', { 
+                role: 'teacher', 
+                code: currentClassCode,
+                serverAddress: serverAddress
+            });
         }
         
         function joinClass() {

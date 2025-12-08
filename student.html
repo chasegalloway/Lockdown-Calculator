@@ -223,7 +223,7 @@
         ipcRenderer.on('init-student', (event, data) => {
             classCode = data.classCode;
             studentName = data.studentName || 'Student';
-            serverAddress = data.serverAddress || 'localhost:3000';
+            serverAddress = data.serverAddress;
             document.getElementById('class-code').textContent = classCode;
             console.log('Connecting to server:', serverAddress);
             

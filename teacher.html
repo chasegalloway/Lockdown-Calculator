@@ -271,12 +271,12 @@
                     `<div style="margin-bottom: 3px;">${addr}</div>`
                 ).join('');
             } else {
-                addressEl.textContent = 'localhost:3000 (local only)';
+                // addressEl.textContent = 'localhost:3000 (local only)';
             }
         }
         
-        function initSocket() {
-            socket = io('http://localhost:3000', {
+        function initSocket(serverAddress = 'http://localhost:3000') {
+            socket = io(serverAddress, {
                 reconnection: true,
                 reconnectionDelay: 1000,
                 reconnectionDelayMax: 5000,
@@ -316,7 +316,8 @@
             
             // Wait a moment for socket to be ready, then create class
             setTimeout(() => {
-                if (!socket) initSocket();
+                const serverAddress = data.serverAddress || 'http://localhost:3000';
+                if (!socket) initSocket(serverAddress);
                 
                 socket.emit('create-class', {
                     classCode: classCode,

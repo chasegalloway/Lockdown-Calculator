@@ -88,7 +88,8 @@ function createMainWindow(role, data = {}) {
   mainWindow.webContents.on('did-finish-load', () => {
     if (role === 'teacher') {
       mainWindow.webContents.send('init-teacher', {
-        classCode: data.code
+        classCode: data.code,
+        serverAddress: data.serverAddress || 'http://localhost:3000'
       });
     } else {
       mainWindow.webContents.send('init-student', {
