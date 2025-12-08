@@ -10,7 +10,7 @@ const io = socketIO(server, {
     origin: "*",
     methods: ["GET", "POST"]
   },
-  transports: ['polling'],
+  transports: ['websocket', 'polling'],
   allowEIO3: true,
   pingTimeout: 60000,
   pingInterval: 25000
@@ -234,8 +234,8 @@ io.on('connection', (socket) => {
   });
 });
 
-server.listen(PORT, () => {
-  console.log(`Server running on http://localhost:${PORT}`);
+server.listen(PORT, '0.0.0.0', () => {
+  console.log(`Server running on port ${PORT}`);
   console.log('WebSocket server ready for connections');
 });
 

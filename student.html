@@ -128,7 +128,7 @@
                 reconnectionDelay: 1000,
                 reconnectionDelayMax: 5000,
                 reconnectionAttempts: 10,
-                transports: ['polling']
+                transports: ['websocket', 'polling']
             });
             
             socket.on('connect', () => {

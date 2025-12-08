@@ -186,7 +186,7 @@
                 type="text" 
                 id="server-address" 
                 placeholder="Server Address (teacher's URL)" 
-                value="http://localhost:3000"
+                value="https://lockdown-calculator.onrender.com/"
             >
             <div style="font-size: 11px; color: #999; margin-top: -10px; margin-bottom: 10px; text-align: center;">
                 Ask your teacher for the server address
@@ -223,8 +223,8 @@
                 reconnection: true,
                 reconnectionDelay: 1000,
                 reconnectionDelayMax: 5000,
-                reconnectionAttempts: 5,
-                transports: ['polling']
+                reconnectionAttempts: 10,
+                transports: ['websocket', 'polling']
             });
             
             socket.on('connect', () => {
