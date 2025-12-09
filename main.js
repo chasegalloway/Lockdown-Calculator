@@ -1,6 +1,7 @@
 const { app, BrowserWindow, ipcMain } = require('electron');
 const { spawn } = require('child_process');
 const path = require('path');
+const { autoUpdater } = require('electron-updater');
 
 let mainWindow;
 let loginWindow;
@@ -8,6 +9,8 @@ let serverProcess;
 let currentClassCode = null;
 let isStudentMode = false;
 
+// Configure auto-updater
+autoUpdater.checkForUpdatesAndNotify();
 // Set user data directory to avoid cache permission errors
 const userDataPath = path.join(app.getPath('appData'), 'lockdown-calculator');
 app.setPath('userData', userDataPath);
@@ -103,6 +106,7 @@ function createMainWindow(role, data = {}) {
   // Prevent student from closing the window
   if (role === 'student') {
     let isLocked = true; // Start locked
+    let focusInterval = null;
 
     mainWindow.on('close', (e) => {
       if (!app.isQuitting && isLocked) {
@@ -110,6 +114,13 @@ function createMainWindow(role, data = {}) {
         mainWindow.webContents.executeJavaScript(`
           alert('This window is locked. Please ask your teacher to close it.');
         `);
+      }
+    });
+
+    // If focus is lost while locked, immediately refocus the window
+    mainWindow.on('blur', () => {
+      if (isLocked) {
+        mainWindow.focus();
       }
     });
 
@@ -123,6 +134,12 @@ function createMainWindow(role, data = {}) {
     // Disable keyboard shortcuts (but allow Ctrl+M to minimize for testing)
     mainWindow.webContents.on('before-input-event', (event, input) => {
       if (isLocked) {
+        // Block Windows key and meta combos to keep taskbar/start menu hidden
+        const keyLower = input.key ? input.key.toLowerCase() : '';
+        if (input.meta || keyLower === 'meta' || keyLower === 'super' || keyLower === 'win' || keyLower === 'os') {
+          event.preventDefault();
+          return;
+        }
         if (input.control && input.key.toLowerCase() === 'w') {
           event.preventDefault();
         }
@@ -152,10 +169,25 @@ function createMainWindow(role, data = {}) {
         // Lock: fullscreen hides title bar, always on top
         mainWindow.setFullScreen(true);
         mainWindow.setAlwaysOnTop(true);
+
+        // Start aggressive refocus loop to stay above Start/taskbar
+        if (!focusInterval) {
+          focusInterval = setInterval(() => {
+            if (mainWindow && !mainWindow.isFocused()) {
+              mainWindow.focus();
+            }
+          }, 500);
+        }
       } else {
         // Unlock: exit fullscreen shows title bar with controls, not always on top
         mainWindow.setAlwaysOnTop(false);
         mainWindow.setFullScreen(false);
+
+        // Stop refocus loop when unlocked
+        if (focusInterval) {
+          clearInterval(focusInterval);
+          focusInterval = null;
+        }
       }
     });
   }
@@ -180,12 +212,20 @@ ipcMain.on('close-student-window', (event) => {
   }
 });
 
-ipcMain.on('start-app', async (event, data) => {
-  // Start server if teacher is starting
-  if (data.role === 'teacher') {
-    await startServer();
+ipcMain.on('return-to-login', (event) => {
+  // Return to login screen by reloading the login.html file
+  if (mainWindow) {
+    mainWindow.loadFile('login.html');
+    // Resize window back to login size
+    mainWindow.setSize(500, 600);
+    // Unlock the window so they can interact with login
+    mainWindow.setFullScreen(false);
+    mainWindow.setAlwaysOnTop(false);
   }
-  
+});
+
+ipcMain.on('start-app', async (event, data) => {
+  // No longer starting local server - using Render hosted server
   createMainWindow(data.role, data);
 });
 

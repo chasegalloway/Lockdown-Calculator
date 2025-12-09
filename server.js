@@ -8,9 +8,10 @@ const server = http.createServer(app);
 const io = socketIO(server, {
   cors: {
     origin: "*",
-    methods: ["GET", "POST"]
+    methods: ["GET", "POST"],
+    credentials: true
   },
-  transports: ['websocket', 'polling'],
+  transports: ['polling', 'websocket'],
   allowEIO3: true,
   pingTimeout: 60000,
   pingInterval: 25000

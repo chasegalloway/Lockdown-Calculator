@@ -119,16 +119,20 @@
         let socket = null;
         let classCode = '';
         let studentName = '';
-        let serverAddress = 'https://lockdown-calculator-eno1g1p0g-chasegalloways-projects.vercel.app';
+        let serverAddress = 'https://lockdown-calculator.onrender.com';
+        let socketInitialized = false;
         
         function initSocket() {
+            if (socketInitialized) return; // Prevent duplicate initialization
+            socketInitialized = true;
+            
             const url = serverAddress.startsWith('http') ? serverAddress : `http://${serverAddress}`;
             socket = io(url, {
                 reconnection: true,
                 reconnectionDelay: 1000,
                 reconnectionDelayMax: 5000,
                 reconnectionAttempts: 10,
-                transports: ['websocket', 'polling']
+                transports: ['polling', 'websocket']
             });
             
             socket.on('connect', () => {
@@ -195,9 +199,14 @@
                     case 'kick-student':
                         console.log('Processing kick-student command');
                         showNotification(command.message || 'You have been kicked from class');
+                        // Unlock the window first
+                        ipcRenderer.send('set-student-lock', false);
+                        // Disconnect the socket
+                        if (socket) socket.disconnect();
+                        // Go back to login after showing message
                         setTimeout(() => {
-                            ipcRenderer.send('close-student-window');
-                        }, 1500);
+                            ipcRenderer.send('return-to-login');
+                        }, 2000);
                         break;
                         
                     default:
@@ -297,13 +306,10 @@
             setTimeout(injectStyles, 2000);
             setTimeout(injectStyles, 3000);
         }
-        // Initialize on page load if not already done
+        
+        // Hide desmos buttons on page load
         window.addEventListener('load', () => {
-            setTimeout(() => {
-                if (!socket) initSocket();
-                // Also try to hide buttons on page load
-                setTimeout(hideDesmosAuthButtons, 1000);
-            }, 500);
+            setTimeout(hideDesmosAuthButtons, 1000);
         });
     </script>
 </body>

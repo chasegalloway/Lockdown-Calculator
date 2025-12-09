@@ -196,10 +196,6 @@
         <h2>Teacher Dashboard</h2>
         <div class="info-text">Your class code:</div>
         <div class="class-code-display" id="class-code">------</div>
-        <div style="margin-top: 10px; padding: 10px; background: #1e1e1e; border-radius: 5px; font-size: 12px;">
-            <div style="color: #999; margin-bottom: 5px;">Server Address:</div>
-            <div id="server-address" style="color: #0066cc; font-family: monospace; word-break: break-all;">Loading...</div>
-        </div>
         
         <h3 style="margin-top: 20px;">Students (<span id="student-count">0</span>)</h3>
         <div class="student-list" id="student-list">
@@ -227,7 +223,7 @@
     
     <div class="main-content">
         <div class="header">
-            <h1>Teacher View</h1>
+            <!-- <h1>nbsp</h1> -->
             <div class="student-count">
                 <span id="student-count-header">0</span> students connected
             </div>
@@ -266,22 +262,16 @@
             }
             
             const addressEl = document.getElementById('server-address');
-            if (addresses.length > 0) {
-                addressEl.innerHTML = addresses.map(addr => 
-                    `<div style="margin-bottom: 3px;">${addr}</div>`
-                ).join('');
-            } else {
-                // addressEl.textContent = 'localhost:3000 (local only)';
-            }
+            addressEl.innerHTML = '<div style="margin-bottom: 3px;">https://lockdown-calculator.onrender.com</div>';
         }
         
-        function initSocket(serverAddress = 'http://localhost:3000') {
+        function initSocket(serverAddress = 'https://lockdown-calculator.onrender.com') {
             socket = io(serverAddress, {
                 reconnection: true,
                 reconnectionDelay: 1000,
                 reconnectionDelayMax: 5000,
                 reconnectionAttempts: 10,
-                transports: ['websocket', 'polling']
+                transports: ['polling', 'websocket']
             });
             
             socket.on('connect', () => {
@@ -407,16 +397,16 @@
             
             contextMenu.innerHTML = `
                 <div class="context-menu-item" onclick="lockStudent('${studentId}', '${studentName}')">
-                    🔒 Lock Student
+                    Lock Student
                 </div>
                 <div class="context-menu-item" onclick="unlockStudent('${studentId}', '${studentName}')">
-                    🔓 Unlock Student
+                    Unlock Student
                 </div>
                 <div class="context-menu-item" onclick="clearStudent('${studentId}', '${studentName}')">
-                    🗑️ Clear Calculator
+                    Clear Calculator
                 </div>
                 <div class="context-menu-item danger" onclick="kickStudent('${studentId}', '${studentName}')">
-                    ❌ Kick Student
+                    Kick Student
                 </div>
             `;
             

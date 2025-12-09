@@ -1,20 +1,53 @@
 {
   "name": "lockdown-calculator",
   "version": "1.0.0",
-  "description": "",
+  "description": "Teacher-controlled Desmos calculator with remote management",
   "main": "main.js",
   "scripts": {
     "start": "electron .",
-    "server": "node server.js"
+    "server": "node server.js",
+    "build": "electron-builder",
+    "build:win": "electron-builder --win"
   },
-  "keywords": ["electron", "desmos", "calculator"],
+  "keywords": [
+    "electron",
+    "desmos",
+    "calculator"
+  ],
   "author": "Chase Galloway",
   "license": "MIT",
   "dependencies": {
+    "electron-updater": "^6.6.2",
     "express": "^4.18.2",
     "socket.io": "^4.6.1"
   },
   "devDependencies": {
-    "electron": "^28.0.0"
+    "electron": "^28.0.0",
+    "electron-builder": "^26.0.12"
+  },
+  "build": {
+    "appId": "com.chasegalloway.lockdown-calculator",
+    "productName": "Lockdown Calculator",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "main.js",
+      "server.js",
+      "*.html",
+      "node_modules/**/*"
+    ],
+    "win": {
+      "target": [
+        "nsis",
+        "portable"
+      ]
+    },
+    "publish": {
+      "provider": "github",
+      "owner": "chasegalloway",
+      "repo": "Lockdown-Calculator",
+      "releaseType": "release"
+    }
   }
 }

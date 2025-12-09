@@ -172,7 +172,7 @@
         </div>
         
         <div id="student-section" class="input-section">
-            <p class="info-text">Enter the server address and class code</p>
+            <p class="info-text">Enter the class code provided by your teacher</p>
             <div id="error-message" class="error-text"></div>
             <div class="student-name-input">
                 <input 
@@ -181,15 +181,6 @@
                     placeholder="Your Name" 
                     maxlength="30"
                 >
-            </div>
-            <input 
-                type="text" 
-                id="server-address" 
-                placeholder="Server Address (teacher's URL)" 
-                value="https://lockdown-calculator.onrender.com/"
-            >
-            <div style="font-size: 11px; color: #999; margin-top: -10px; margin-bottom: 10px; text-align: center;">
-                Ask your teacher for the server address
             </div>
             <input 
                 type="text" 
@@ -209,7 +200,7 @@
         
         let currentClassCode = '';
         let socket = null;
-        let serverAddress = 'https://lockdown-calculator.onrender.com/';
+        let serverAddress = 'https://lockdown-calculator.onrender.com';
         
         function initSocket(customAddress = null) {
             if (socket && socket.connected) {
@@ -224,7 +215,7 @@
                 reconnectionDelay: 1000,
                 reconnectionDelayMax: 5000,
                 reconnectionAttempts: 10,
-                transports: ['websocket', 'polling']
+                transports: ['polling', 'websocket']
             });
             
             socket.on('connect', () => {
@@ -274,15 +265,9 @@
         }
         
         function joinClass() {
-            const serverAddr = document.getElementById('server-address').value.trim();
             const enteredCode = document.getElementById('student-code').value.toUpperCase().trim();
             const studentName = document.getElementById('student-name').value.trim();
             const errorEl = document.getElementById('error-message');
-            
-            if (!serverAddr) {
-                errorEl.textContent = 'Please enter the server address';
-                return;
-            }
             
             if (!studentName) {
                 errorEl.textContent = 'Please enter your name';
@@ -295,9 +280,8 @@
             }
             
             errorEl.textContent = '';
-            serverAddress = serverAddr;
             
-            // Initialize socket with the specified server address
+            // Initialize socket with hardcoded server address
             initSocket(serverAddress);
             
             // Wait for socket to be ready
@@ -308,13 +292,13 @@
                 }
             }, 100);
             
-            // Timeout after 3 seconds
+            // Timeout after 5 seconds
             setTimeout(() => {
                 clearInterval(checkSocket);
                 if (!socket || !socket.connected) {
                     errorEl.textContent = 'Cannot connect to server';
                 }
-            }, 3000);
+            }, 5000);
         
         
         function validateAndJoin(code, studentName, errorEl) {
