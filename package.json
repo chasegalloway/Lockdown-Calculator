@@ -1,6 +1,6 @@
 {
   "name": "lockdown-calculator",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Teacher-controlled Desmos calculator with remote management",
   "main": "main.js",
   "scripts": {
@@ -35,13 +35,23 @@
       "main.js",
       "server.js",
       "*.html",
+      "icon.png",
       "node_modules/**/*"
     ],
     "win": {
       "target": [
-        "nsis",
+        {
+          "target": "nsis",
+          "arch": ["x64"]
+        },
         "portable"
-      ]
+      ],
+      "icon": "icon.png"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "perMachine": false
     },
     "publish": {
       "provider": "github",

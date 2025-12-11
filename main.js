@@ -1,27 +1,75 @@
-const { app, BrowserWindow, ipcMain } = require('electron');
+const { app, BrowserWindow, ipcMain, globalShortcut } = require('electron');
 const { spawn } = require('child_process');
+const net = require('net');
 const path = require('path');
 const { autoUpdater } = require('electron-updater');
 
 let mainWindow;
 let loginWindow;
 let serverProcess;
+let keyBlockerProcess;
 let currentClassCode = null;
 let isStudentMode = false;
 
-// Configure auto-updater
 autoUpdater.checkForUpdatesAndNotify();
-// Set user data directory to avoid cache permission errors
 const userDataPath = path.join(app.getPath('appData'), 'lockdown-calculator');
 app.setPath('userData', userDataPath);
 
-// Ignore certificate errors for local network connections
 app.commandLine.appendSwitch('ignore-certificate-errors');
 app.commandLine.appendSwitch('allow-insecure-localhost', 'true');
 
-// Start the server
+function sendKeyBlockerCommand(command) {
+  try {
+    const client = new net.Socket();
+    client.connect(9876, '127.0.0.1', () => {
+      client.write(command);
+      client.destroy();
+    });
+    client.on('error', (err) => {
+      console.log('KeyBlocker command failed (not running yet?):', err.message);
+    });
+    client.setTimeout(500, () => client.destroy());
+  } catch (err) {
+    console.log('Error sending KeyBlocker command:', err.message);
+  }
+}
+
+function startKeyBlocker() {
+  if (keyBlockerProcess) return;
+  
+  try {
+    const keyBlockerPath = path.join(__dirname, 'KeyBlocker.exe');
+    keyBlockerProcess = spawn(keyBlockerPath, [], {
+      detached: true,
+      stdio: 'ignore',
+      windowsHide: true
+    });
+    
+    keyBlockerProcess.unref();
+    console.log('KeyBlocker started');
+    
+    // Give it time to start listening
+    setTimeout(() => {
+      sendKeyBlockerCommand('UNBLOCK');
+      console.log('Initial state: Windows key UNBLOCKED');
+    }, 1500);
+  } catch (err) {
+    console.error('Error starting KeyBlocker:', err.message);
+  }
+}
+
+function blockWindowsKey(enable) {
+  if (enable) {
+    console.log('Sending BLOCK command to KeyBlocker');
+    sendKeyBlockerCommand('BLOCK');
+  } else {
+    console.log('Sending UNBLOCK command to KeyBlocker');
+    sendKeyBlockerCommand('UNBLOCK');
+  }
+}
+
 function startServer() {
-  if (serverProcess) return; // Server already running
+  if (serverProcess) return;
   
   console.log('Starting server...');
   serverProcess = spawn('node', ['server.js'], {
@@ -38,7 +86,6 @@ function startServer() {
     serverProcess = null;
   });
   
-  // Wait a moment for server to start
   return new Promise(resolve => setTimeout(resolve, 2000));
 }
 
@@ -67,18 +114,16 @@ function createMainWindow(role, data = {}) {
     },
   };
 
-  // If student mode, enable kiosk-like behavior
   if (role === 'student') {
     isStudentMode = true;
     windowConfig.fullscreen = true;
     windowConfig.kiosk = false;
-    windowConfig.frame = true; // Keep frame but fullscreen hides it
+    windowConfig.frame = true;
     windowConfig.alwaysOnTop = true;
   }
 
   mainWindow = new BrowserWindow(windowConfig);
   
-  // Load appropriate file based on role
   if (role === 'teacher') {
     mainWindow.loadFile('teacher.html');
   } else {
@@ -87,25 +132,23 @@ function createMainWindow(role, data = {}) {
   
   mainWindow.setMenuBarVisibility(false);
 
-  // Send initialization data after window loads
   mainWindow.webContents.on('did-finish-load', () => {
     if (role === 'teacher') {
       mainWindow.webContents.send('init-teacher', {
         classCode: data.code,
-        serverAddress: data.serverAddress || 'http://localhost:3000'
+        serverAddress: data.serverAddress
       });
     } else {
       mainWindow.webContents.send('init-student', {
         classCode: data.code,
         studentName: data.studentName,
-        serverAddress: data.serverAddress || 'localhost:3000'
+        serverAddress: data.serverAddress
       });
     }
   });
 
-  // Prevent student from closing the window
   if (role === 'student') {
-    let isLocked = true; // Start locked
+    let isLocked = true;
     let focusInterval = null;
 
     mainWindow.on('close', (e) => {
@@ -117,24 +160,20 @@ function createMainWindow(role, data = {}) {
       }
     });
 
-    // If focus is lost while locked, immediately refocus the window
     mainWindow.on('blur', () => {
       if (isLocked) {
         mainWindow.focus();
       }
     });
 
-    // Prevent navigation away
     mainWindow.webContents.on('will-navigate', (event, url) => {
       if (isLocked && !url.includes('localhost') && !url.includes('desmos.com') && !url.includes('file://')) {
         event.preventDefault();
       }
     });
 
-    // Disable keyboard shortcuts (but allow Ctrl+M to minimize for testing)
     mainWindow.webContents.on('before-input-event', (event, input) => {
       if (isLocked) {
-        // Block Windows key and meta combos to keep taskbar/start menu hidden
         const keyLower = input.key ? input.key.toLowerCase() : '';
         if (input.meta || keyLower === 'meta' || keyLower === 'super' || keyLower === 'win' || keyLower === 'os') {
           event.preventDefault();
@@ -153,24 +192,23 @@ function createMainWindow(role, data = {}) {
           event.preventDefault();
         }
       }
-      // Allow Ctrl+M to minimize for testing purposes
       if (input.control && input.key.toLowerCase() === 'm') {
         mainWindow.minimize();
         event.preventDefault();
       }
     });
 
-    // IPC handler to lock/unlock student
     ipcMain.on('set-student-lock', (event, locked) => {
       isLocked = locked;
       console.log(`Student window lock set to: ${isLocked}`);
       
+      // Control Windows key blocking
+      blockWindowsKey(locked);
+      
       if (locked) {
-        // Lock: fullscreen hides title bar, always on top
         mainWindow.setFullScreen(true);
         mainWindow.setAlwaysOnTop(true);
 
-        // Start aggressive refocus loop to stay above Start/taskbar
         if (!focusInterval) {
           focusInterval = setInterval(() => {
             if (mainWindow && !mainWindow.isFocused()) {
@@ -179,11 +217,9 @@ function createMainWindow(role, data = {}) {
           }, 500);
         }
       } else {
-        // Unlock: exit fullscreen shows title bar with controls, not always on top
         mainWindow.setAlwaysOnTop(false);
         mainWindow.setFullScreen(false);
 
-        // Stop refocus loop when unlocked
         if (focusInterval) {
           clearInterval(focusInterval);
           focusInterval = null;
@@ -192,14 +228,12 @@ function createMainWindow(role, data = {}) {
     });
   }
 
-  // Close login window after main window opens
   if (loginWindow) {
     loginWindow.close();
     loginWindow = null;
   }
 }
 
-// IPC handlers
 ipcMain.on('store-class-code', (event, code) => {
   currentClassCode = code;
   console.log('Class code generated:', code);
@@ -213,23 +247,21 @@ ipcMain.on('close-student-window', (event) => {
 });
 
 ipcMain.on('return-to-login', (event) => {
-  // Return to login screen by reloading the login.html file
   if (mainWindow) {
     mainWindow.loadFile('login.html');
-    // Resize window back to login size
     mainWindow.setSize(500, 600);
-    // Unlock the window so they can interact with login
     mainWindow.setFullScreen(false);
     mainWindow.setAlwaysOnTop(false);
   }
 });
 
 ipcMain.on('start-app', async (event, data) => {
-  // No longer starting local server - using Render hosted server
   createMainWindow(data.role, data);
 });
 
 app.whenReady().then(() => {
+  startServer();
+  startKeyBlocker();
   createLoginWindow();
 
   app.on('activate', () => {
@@ -247,7 +279,7 @@ app.on('window-all-closed', () => {
 
 app.on('before-quit', () => {
   app.isQuitting = true;
-  // Kill server process when app quits
+  blockWindowsKey(false); // Ensure Windows key is re-enabled
   if (serverProcess) {
     serverProcess.kill();
   }
