@@ -287,11 +287,37 @@ ipcMain.on('close-student-window', (event) => {
 });
 
 ipcMain.on('return-to-login', (event) => {
+  console.log('[MAIN] return-to-login received');
   if (mainWindow) {
-    mainWindow.loadFile('login.html');
-    mainWindow.setSize(500, 600);
-    mainWindow.setFullScreen(false);
-    mainWindow.setAlwaysOnTop(false);
+    try {
+      // Reset window state - order matters!
+      console.log('[MAIN] Resetting window state...');
+      mainWindow.setFullScreen(false);
+      mainWindow.setAlwaysOnTop(false);
+      mainWindow.setMovable(true);
+      mainWindow.setResizable(true);
+      
+      // Unblock keyboard if it was locked
+      blockWindowsKey(false);
+      
+      // Reset size and position
+      mainWindow.setSize(500, 600);
+      mainWindow.center();
+      
+      // Clear any student-specific state
+      isStudentMode = false;
+      
+      console.log('[MAIN] Loading login.html...');
+      mainWindow.loadFile('login.html');
+      mainWindow.show();
+      mainWindow.focus();
+      console.log('[MAIN] Window reset to login page');
+    } catch (err) {
+      console.error('[MAIN] Error during return-to-login:', err);
+    }
+  } else {
+    console.log('[MAIN] mainWindow not available, creating new login window');
+    createLoginWindow();
   }
 });
 

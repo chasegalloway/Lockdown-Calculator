@@ -200,14 +200,24 @@
                         break;
                         
                     case 'kick-student':
+                        console.log('=== PROCESSING KICK-STUDENT ===');
                         console.log('Processing kick-student command');
+                        console.log('Current studentLocked:', studentLocked);
                         showNotification(command.message || 'You have been kicked from class');
                         // Unlock the window first
+                        console.log('[STUDENT] Setting studentLocked to false');
+                        studentLocked = false;
+                        console.log('[STUDENT] Sending set-student-lock false to main process');
                         ipcRenderer.send('set-student-lock', false);
                         // Disconnect the socket
-                        if (socket) socket.disconnect();
+                        console.log('[STUDENT] Disconnecting socket');
+                        if (socket) {
+                            socket.disconnect();
+                        }
                         // Go back to login after showing message
+                        console.log('[STUDENT] Scheduling return-to-login after 2 seconds');
                         setTimeout(() => {
+                            console.log('[STUDENT] NOW SENDING return-to-login IPC message');
                             ipcRenderer.send('return-to-login');
                         }, 2000);
                         break;
@@ -219,11 +229,18 @@
             });
             
             socket.on('teacher-disconnected', () => {
+                console.log('=== TEACHER DISCONNECTED ===');
                 showNotification('Teacher has disconnected');
                 // Unlock the window first
+                studentLocked = false;
                 ipcRenderer.send('set-student-lock', false);
+                // Disconnect the socket
+                if (socket) {
+                    socket.disconnect();
+                }
                 // Return to login after showing message
                 setTimeout(() => {
+                    console.log('Sending return-to-login after teacher disconnect');
                     ipcRenderer.send('return-to-login');
                 }, 2000);
             });
