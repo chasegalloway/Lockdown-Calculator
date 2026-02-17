@@ -14,8 +14,6 @@
 
 static HHOOK hookHandle = NULL;
 static std::atomic<bool> blockingEnabled(false);
-static HANDLE hStdinRead = NULL;
-static HANDLE hStdinWrite = NULL;
 
 void Log(const char* message) {
     FILE* f = fopen("C:\\Windows\\Temp\\keyblocker.log", "a");

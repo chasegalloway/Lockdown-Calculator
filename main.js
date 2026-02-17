@@ -18,10 +18,14 @@ app.setPath('userData', userDataPath);
 app.commandLine.appendSwitch('ignore-certificate-errors');
 app.commandLine.appendSwitch('allow-insecure-localhost', 'true');
 
+if (process.platform === 'win32') {
+  app.setAppUserModelId('com.chasegalloway.lockdown-calculator');
+}
+
 function sendKeyBlockerCommand(command) {
   try {
     const client = new net.Socket();
-    client.connect(9876, '127.0.0.1', () => {
+    client.connect(6741, '127.0.0.1', () => {
       client.write(command);
       client.destroy();
     });
@@ -48,7 +52,6 @@ function startKeyBlocker() {
     keyBlockerProcess.unref();
     console.log('KeyBlocker started');
     
-    // Give it time to start listening
     setTimeout(() => {
       sendKeyBlockerCommand('UNBLOCK');
       console.log('Initial state: Windows key UNBLOCKED');
@@ -94,6 +97,7 @@ function createLoginWindow() {
     width: 500,
     height: 600,
     resizable: false,
+    icon: path.join(__dirname, 'icon.png'),
     webPreferences: {
       nodeIntegration: true,
       contextIsolation: false,
@@ -108,6 +112,7 @@ function createMainWindow(role, data = {}) {
   const windowConfig = {
     width: 1200,
     height: 800,
+    icon: path.join(__dirname, 'icon.png'),
     webPreferences: {
       nodeIntegration: true,
       contextIsolation: false,
@@ -116,10 +121,6 @@ function createMainWindow(role, data = {}) {
 
   if (role === 'student') {
     isStudentMode = true;
-    windowConfig.fullscreen = true;
-    windowConfig.kiosk = false;
-    windowConfig.frame = true;
-    windowConfig.alwaysOnTop = true;
   }
 
   mainWindow = new BrowserWindow(windowConfig);
@@ -148,21 +149,68 @@ function createMainWindow(role, data = {}) {
   });
 
   if (role === 'student') {
-    let isLocked = true;
+    let isLocked = false;
     let focusInterval = null;
+    let wasFocused = true;
 
     mainWindow.on('close', (e) => {
       if (!app.isQuitting && isLocked) {
         e.preventDefault();
         mainWindow.webContents.executeJavaScript(`
-          alert('This window is locked. Please ask your teacher to close it.');
+          alert('This window is locked. Please ask your teacher to unlock it first.');
         `);
       }
     });
 
     mainWindow.on('blur', () => {
+      if (isLocked && wasFocused) {
+        wasFocused = false;
+        console.log('Student lost focus while locked (blur)');
+        console.log('Sending IPC event: student-focus-lost');
+        mainWindow.webContents.send('student-focus-lost', { detail: 'lost-focus' });
+      }
+    });
+
+    mainWindow.on('focus', () => {
+      if (isLocked && !wasFocused) {
+        wasFocused = true;
+        console.log('Student regained focus (focus)');
+        console.log('Sending IPC event: student-focus-regained');
+        mainWindow.webContents.send('student-focus-regained', { detail: 'regained-focus' });
+      }
+    });
+
+    mainWindow.on('minimize', () => {
       if (isLocked) {
-        mainWindow.focus();
+        console.log('Student minimized window while locked');
+        console.log('Sending IPC event: student-focus-lost (minimized)');
+        mainWindow.webContents.send('student-focus-lost', { detail: 'window-minimized' });
+      }
+    });
+
+    mainWindow.on('restore', () => {
+      if (isLocked) {
+        console.log('Student restored window while locked');
+        console.log('Sending IPC event: student-focus-regained (restored)');
+        mainWindow.webContents.send('student-focus-regained', { detail: 'window-restored' });
+      }
+    });
+
+    mainWindow.on('show', () => {
+      if (isLocked && !wasFocused) {
+        wasFocused = true;
+        console.log('Student window shown');
+        console.log('Sending IPC event: student-focus-regained (shown)');
+        mainWindow.webContents.send('student-focus-regained', { detail: 'window-shown' });
+      }
+    });
+
+    mainWindow.on('hide', () => {
+      if (isLocked && wasFocused) {
+        wasFocused = false;
+        console.log('Student window hidden');
+        console.log('Sending IPC event: student-focus-lost (hidden)');
+        mainWindow.webContents.send('student-focus-lost', { detail: 'window-hidden' });
       }
     });
 
@@ -201,21 +249,13 @@ function createMainWindow(role, data = {}) {
     ipcMain.on('set-student-lock', (event, locked) => {
       isLocked = locked;
       console.log(`Student window lock set to: ${isLocked}`);
-      
-      // Control Windows key blocking
+
       blockWindowsKey(locked);
       
       if (locked) {
         mainWindow.setFullScreen(true);
         mainWindow.setAlwaysOnTop(true);
-
-        if (!focusInterval) {
-          focusInterval = setInterval(() => {
-            if (mainWindow && !mainWindow.isFocused()) {
-              mainWindow.focus();
-            }
-          }, 500);
-        }
+        // Don't use auto-focus interval - it interferes with blur event detection
       } else {
         mainWindow.setAlwaysOnTop(false);
         mainWindow.setFullScreen(false);
@@ -279,7 +319,7 @@ app.on('window-all-closed', () => {
 
 app.on('before-quit', () => {
   app.isQuitting = true;
-  blockWindowsKey(false); // Ensure Windows key is re-enabled
+  blockWindowsKey(false); 
   if (serverProcess) {
     serverProcess.kill();
   }

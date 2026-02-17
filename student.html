@@ -121,6 +121,7 @@
         let studentName = '';
         let serverAddress = 'https://lockdown-calculator.onrender.com';
         let socketInitialized = false;
+        let studentLocked = false;
         
         function initSocket() {
             if (socketInitialized) return; // Prevent duplicate initialization
@@ -184,6 +185,7 @@
                         console.log('Processing lock-calculator command');
                         showNotification('Calculator locked by teacher');
                         ipcRenderer.send('set-student-lock', true);
+                        studentLocked = true;
                         lockCalculator();
                         break;
                         
@@ -192,6 +194,7 @@
                         console.log('Unlock command received, unlocking calculator');
                         showNotification('Calculator unlocked - you can now leave');
                         ipcRenderer.send('set-student-lock', false);
+                        studentLocked = false;
                         unlockCalculator();
                         console.log('Unlock function called, calculator unlocked, window restrictions removed');
                         break;
@@ -217,6 +220,12 @@
             
             socket.on('teacher-disconnected', () => {
                 showNotification('Teacher has disconnected');
+                // Unlock the window first
+                ipcRenderer.send('set-student-lock', false);
+                // Return to login after showing message
+                setTimeout(() => {
+                    ipcRenderer.send('return-to-login');
+                }, 2000);
             });
             
             socket.on('settings-updated', (settings) => {
@@ -240,6 +249,45 @@
             setTimeout(() => {
                 initSocket();
             }, 500);
+        });
+
+        // Monitor focus loss via Electron IPC
+        ipcRenderer.on('student-focus-lost', (event, data) => {
+            console.log('=== STUDENT: IPC student-focus-lost received ===');
+            console.log('studentLocked:', studentLocked);
+            console.log('socket exists:', !!socket);
+            console.log('socket connected:', socket?.connected);
+            console.log('socket ID:', socket?.id);
+            
+            if (studentLocked && socket && socket.connected) {
+                const detail = data?.detail || 'lost-focus';
+                console.log('Emitting focus-lost event to teacher:', detail);
+                const eventData = { type: 'lost-focus', detail: detail, studentName: studentName };
+                console.log('Event payload:', eventData);
+                socket.emit('student-activity', eventData);
+                console.log('=== STUDENT: focus-lost emitted to server ===');
+            } else {
+                console.log('Skipped emit - studentLocked:', studentLocked, 'socket:', !!socket, 'connected:', socket?.connected);
+            }
+        });
+
+        ipcRenderer.on('student-focus-regained', (event, data) => {
+            console.log('=== STUDENT: IPC student-focus-regained received ===');
+            console.log('studentLocked:', studentLocked);
+            console.log('socket exists:', !!socket);
+            console.log('socket connected:', socket?.connected);
+            console.log('socket ID:', socket?.id);
+            
+            if (studentLocked && socket && socket.connected) {
+                const detail = data?.detail || 'regained-focus';
+                console.log('Emitting focus-regained event to teacher:', detail);
+                const eventData = { type: 'regained-focus', detail: detail, studentName: studentName };
+                console.log('Event payload:', eventData);
+                socket.emit('student-activity', eventData);
+                console.log('=== STUDENT: focus-regained emitted to server ===');
+            } else {
+                console.log('Skipped emit - studentLocked:', studentLocked, 'socket:', !!socket, 'connected:', socket?.connected);
+            }
         });
         
         function showNotification(message) {

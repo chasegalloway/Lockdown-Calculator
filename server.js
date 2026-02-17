@@ -39,7 +39,7 @@ io.on('connection', (socket) => {
       students: [],
       currentExpression: null,
       settings: {
-        locked: true,
+        locked: false,
         allowedFeatures: []
       }
     };
@@ -179,6 +179,47 @@ io.on('connection', (socket) => {
     console.log(`Emitting ${command.type} to student ${studentId}`);
     io.to(studentId).emit('teacher-command', command);
     console.log(`Command emitted successfully to student ${studentId}`);
+  });
+
+  // Student activity events (e.g., lost focus while locked)
+  socket.on('student-activity', (data) => {
+    console.log('\n=== SERVER: Received student-activity ===');
+    console.log('Socket ID of sender:', socket.id);
+    console.log('Raw data:', JSON.stringify(data));
+    
+    const user = users.get(socket.id);
+    console.log('User lookup result:', user);
+    
+    if (!user || user.role !== 'student') {
+      console.log('ERROR: Student-activity rejected - invalid user or not student');
+      console.log('User exists:', !!user, 'Is student:', user?.role === 'student');
+      return;
+    }
+
+    const session = sessions.get(user.classCode);
+    console.log('Session lookup for classCode "' + user.classCode + '":', session);
+    
+    if (!session) {
+      console.log('ERROR: Student-activity rejected - session not found');
+      return;
+    }
+
+    const teacherId = session.teacherId;
+    console.log('Found teacher ID to forward to:', teacherId);
+    console.log('Number of connected sockets:', io.sockets.sockets.size);
+    
+    const eventToSend = {
+      type: data?.type || 'unknown',
+      detail: data?.detail || '',
+      studentName: user.name,
+      studentId: socket.id,
+      timestamp: new Date().toISOString()
+    };
+    console.log('Event to send:', JSON.stringify(eventToSend));
+    
+    io.to(teacherId).emit('student-activity', eventToSend);
+    console.log('EMITTED student-activity to teacher socket:', teacherId);
+    console.log('=== SERVER: student-activity forwarded ===\n');
   });
 
   // Teacher updates class settings

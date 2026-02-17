@@ -60,12 +60,37 @@
         .calculator-container {
             flex: 1;
             position: relative;
+            padding: 20px;
         }
         
-        #teacher-calculator {
+        .activity-console {
             width: 100%;
             height: 100%;
-            border: none;
+            background: #0d1117;
+            border: 1px solid #3a3a3a;
+            border-radius: 8px;
+            padding: 20px;
+            overflow-y: auto;
+            font-family: 'Consolas', 'Monaco', monospace;
+            font-size: 14px;
+        }
+        
+        .console-entry {
+            padding: 8px 0;
+            border-bottom: 1px solid #2d2d2d;
+        }
+        
+        .console-timestamp {
+            color: #6e7681;
+            margin-right: 10px;
+        }
+        
+        .console-warning {
+            color: #f85149;
+        }
+        
+        .console-info {
+            color: #58a6ff;
         }
         
         .student-list {
@@ -229,11 +254,12 @@
             </div>
         </div>
         <div class="calculator-container">
-            <iframe 
-                id="teacher-calculator" 
-                src="https://www.desmos.com/calculator"
-                frameborder="0">
-            </iframe>
+            <div class="activity-console" id="activity-console">
+                <div class="console-entry console-info">
+                    <span class="console-timestamp">[System]</span>
+                    Activity console initialized. Monitoring student activity...
+                </div>
+            </div>
         </div>
     </div>
 
@@ -249,23 +275,12 @@
         
         // Display local IP addresses for students to connect to
         function displayServerAddress() {
-            const interfaces = os.networkInterfaces();
-            const addresses = [];
-            
-            for (const name of Object.keys(interfaces)) {
-                for (const iface of interfaces[name]) {
-                    // Skip internal (loopback) and non-IPv4 addresses
-                    if (iface.family === 'IPv4' && !iface.internal) {
-                        addresses.push(`${iface.address}:3000`);
-                    }
-                }
-            }
-            
-            const addressEl = document.getElementById('server-address');
-            addressEl.innerHTML = '<div style="margin-bottom: 3px;">https://lockdown-calculator.onrender.com</div>';
+            // Element doesn't exist in HTML, skip
+            console.log('[TEACHER] Server address display skipped (element not in DOM)');
         }
         
         function initSocket(serverAddress = 'https://lockdown-calculator.onrender.com') {
+            console.log('[TEACHER] Initializing socket with server:', serverAddress);
             socket = io(serverAddress, {
                 reconnection: true,
                 reconnectionDelay: 1000,
@@ -275,28 +290,53 @@
             });
             
             socket.on('connect', () => {
-                console.log('Teacher: Connected to server');
+                console.log('[TEACHER] Connected to server, socket ID:', socket.id);
                 displayServerAddress();
             });
             
             socket.on('connect_error', (error) => {
-                console.error('Teacher: Connection error:', error);
+                console.error('[TEACHER] Connection error:', error);
             });
             
             socket.on('class-created', (data) => {
-                console.log('Teacher: Class created:', data.classCode);
+                console.log('[TEACHER] Class created:', data.classCode);
             });
             
             socket.on('student-joined', (data) => {
                 students = data.allStudents || [];
                 updateStudentList();
-                console.log('Teacher: Students updated:', students);
+                console.log('[TEACHER] Students updated:', students);
+                if (data.student) {
+                    logToConsole(`${data.student.name} joined the class`, 'info');
+                }
             });
             
             socket.on('student-left', (data) => {
                 students = data.allStudents || [];
                 updateStudentList();
+                logToConsole(`Student left the class`, 'warning');
             });
+
+            // Student activity (focus loss etc.)
+            socket.on('student-activity', (event) => {
+                console.log('[TEACHER] >>> RECEIVED student-activity event:', event);
+                console.log('[TEACHER] Event type:', event?.type);
+                console.log('[TEACHER] Student name:', event?.studentName);
+                const name = event.studentName || 'Unknown student';
+                const detail = event.detail ? ` (${event.detail})` : '';
+                if (event.type === 'lost-focus') {
+                    console.log('[TEACHER] Logging focus lost for:', name);
+                    logToConsole(`${name} lost focus while locked${detail}`, 'warning');
+                } else if (event.type === 'regained-focus') {
+                    console.log('[TEACHER] Logging focus regained for:', name);
+                    logToConsole(`${name} regained focus${detail}`, 'info');
+                } else {
+                    console.log('[TEACHER] Logging activity for:', name);
+                    logToConsole(`${name} activity: ${event.type}${detail}`, 'info');
+                }
+            });
+            
+            console.log('[TEACHER] Socket listeners registered, socket ready to connect');
         }
         
         // Get class code from main process
@@ -336,6 +376,21 @@
             `).join('');
         }
         
+        function logToConsole(message, type = 'info') {
+            const consoleDiv = document.getElementById('activity-console');
+            if (!consoleDiv) {
+                console.error('Console div not found');
+                return;
+            }
+            const timestamp = new Date().toLocaleTimeString();
+            const entry = document.createElement('div');
+            entry.className = `console-entry console-${type}`;
+            entry.innerHTML = `<span class="console-timestamp">[${timestamp}]</span>${message}`;
+            consoleDiv.appendChild(entry);
+            consoleDiv.scrollTop = consoleDiv.scrollHeight;
+            console.log(`[${type}] ${message}`);
+        }
+        
         function syncToStudents() {
             console.log('syncToStudents called, socket:', socket ? 'exists' : 'null');
             if (!socket) {
@@ -347,7 +402,6 @@
                 type: 'sync-state',
                 message: 'Teacher is syncing calculator state'
             });
-            alert('Calculator state synced to all students');
         }
         
         function clearAllStudents() {
@@ -360,7 +414,6 @@
             socket.emit('broadcast-to-students', {
                 type: 'clear-calculator'
             });
-            alert('All student calculators cleared');
         }
         
         function lockAllStudents() {
@@ -374,7 +427,6 @@
                 type: 'lock-calculator',
                 locked: true
             });
-            alert('All student calculators locked');
         }
         
         function unlockAllStudents() {
@@ -388,7 +440,6 @@
                 type: 'unlock-calculator',
                 locked: false
             });
-            alert('All student calculators unlocked');
         }
         
         function showStudentMenu(event, studentId, studentName) {
@@ -426,7 +477,6 @@
                 studentId: studentId,
                 command: { type: 'lock-calculator' }
             });
-            alert(`${studentName}'s calculator locked`);
             hideContextMenu();
         }
         
@@ -441,7 +491,6 @@
                 studentId: studentId,
                 command: { type: 'unlock-calculator' }
             });
-            alert(`${studentName}'s calculator unlocked`);
             hideContextMenu();
         }
         
@@ -456,7 +505,6 @@
                 studentId: studentId,
                 command: { type: 'clear-calculator' }
             });
-            alert(`${studentName}'s calculator cleared`);
             hideContextMenu();
         }
         
@@ -472,7 +520,6 @@
                 studentId: studentId,
                 command: { type: 'kick-student', message: 'You have been kicked from the class' }
             });
-            alert(`${studentName} kicked`);
             hideContextMenu();
         }
         
