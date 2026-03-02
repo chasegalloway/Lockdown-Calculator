@@ -2,6 +2,7 @@ const { app, BrowserWindow, ipcMain, globalShortcut } = require('electron');
 const { spawn } = require('child_process');
 const net = require('net');
 const path = require('path');
+const fs = require('fs');
 const { autoUpdater } = require('electron-updater');
 
 let mainWindow;
@@ -38,15 +39,41 @@ function sendKeyBlockerCommand(command) {
   }
 }
 
+function resolveKeyBlockerPath() {
+  const candidates = app.isPackaged
+    ? [
+        path.join(process.resourcesPath, 'KeyBlocker.exe'),
+        path.join(process.resourcesPath, 'app.asar.unpacked', 'KeyBlocker.exe'),
+        path.join(__dirname, 'KeyBlocker.exe')
+      ]
+    : [path.join(__dirname, 'KeyBlocker.exe')];
+
+  return candidates.find((candidatePath) => fs.existsSync(candidatePath));
+}
+
 function startKeyBlocker() {
   if (keyBlockerProcess) return;
   
   try {
-    const keyBlockerPath = path.join(__dirname, 'KeyBlocker.exe');
+    const keyBlockerPath = resolveKeyBlockerPath();
+    if (!keyBlockerPath) {
+      console.error('KeyBlocker.exe not found in expected locations');
+      return;
+    }
+
     keyBlockerProcess = spawn(keyBlockerPath, [], {
       detached: true,
       stdio: 'ignore',
       windowsHide: true
+    });
+
+    keyBlockerProcess.on('error', (err) => {
+      console.error('Failed to start KeyBlocker:', err.message);
+      keyBlockerProcess = null;
+    });
+
+    keyBlockerProcess.on('close', () => {
+      keyBlockerProcess = null;
     });
     
     keyBlockerProcess.unref();
