@@ -1,13 +1,15 @@
 {
   "name": "lockdown-calculator",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "description": "Teacher-controlled Desmos calculator with remote management",
   "main": "main.js",
   "scripts": {
     "start": "electron .",
     "server": "node server.js",
     "build": "electron-builder",
-    "build:win": "electron-builder --win"
+    "build:win": "electron-builder --win",
+    "build:mac": "electron-builder --mac",
+    "build:all": "electron-builder --win --mac"
   },
   "keywords": [
     "electron",
@@ -33,15 +35,18 @@
     },
     "asarUnpack": [
       "KeyBlocker.exe",
-      "KeyBlocker.exe.manifest"
+      "KeyBlocker.exe.manifest",
+      "KeyBlocker"
     ],
     "files": [
       "main.js",
       "server.js",
       "*.html",
       "icon.png",
+      "icon.ico",
       "KeyBlocker.exe",
       "KeyBlocker.exe.manifest",
+      "KeyBlocker",
       "app.manifest",
       "node_modules/**/*"
     ],
@@ -61,6 +66,30 @@
       "allowToChangeInstallationDirectory": true,
       "allowElevation": true,
       "perMachine": true
+    },
+    "mac": {
+      "target": [
+        "dmg",
+        "zip"
+      ],
+      "icon": "icon.png",
+      "hardenedRuntime": false,
+      "gatekeeperAssess": false
+    },
+    "dmg": {
+      "contents": [
+        {
+          "x": 110,
+          "y": 150,
+          "type": "file"
+        },
+        {
+          "x": 240,
+          "y": 150,
+          "type": "link",
+          "path": "/Applications"
+        }
+      ]
     },
     "publish": {
       "provider": "github",

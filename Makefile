@@ -1,16 +1,25 @@
 CXX = g++
+SWIFTC = swiftc
 CXXFLAGS = -O2 -Wall
 LDFLAGS = -lws2_32 -luser32 -lkernel32 -mwindows
-TARGET = KeyBlocker.exe
-SOURCES = KeyBlocker.cpp
+WIN_TARGET = KeyBlocker.exe
+MAC_TARGET = KeyBlocker
+WIN_SOURCES = KeyBlocker.cpp
+MAC_SOURCES = KeyBlocker.swift
 
-all: $(TARGET)
+all: $(WIN_TARGET)
 
-$(TARGET): $(SOURCES)
-	$(CXX) $(CXXFLAGS) -o $(TARGET) $(SOURCES) $(LDFLAGS)
-	@echo Build complete: $(TARGET)
+$(WIN_TARGET): $(WIN_SOURCES)
+	$(CXX) $(CXXFLAGS) -o $(WIN_TARGET) $(WIN_SOURCES) $(LDFLAGS)
+	@echo Build complete: $(WIN_TARGET)
+
+mac: $(MAC_TARGET)
+
+$(MAC_TARGET): $(MAC_SOURCES)
+	$(SWIFTC) -o $(MAC_TARGET) $(MAC_SOURCES)
+	@echo Build complete: $(MAC_TARGET)
 
 clean:
-	rm -f $(TARGET) *.o
+	rm -f $(WIN_TARGET) $(MAC_TARGET) *.o
 
-.PHONY: all clean
+.PHONY: all mac clean

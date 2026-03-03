@@ -12,7 +12,6 @@ let keyBlockerProcess;
 let currentClassCode = null;
 let isStudentMode = false;
 
-autoUpdater.checkForUpdatesAndNotify();
 const userDataPath = path.join(app.getPath('appData'), 'lockdown-calculator');
 app.setPath('userData', userDataPath);
 
@@ -40,13 +39,16 @@ function sendKeyBlockerCommand(command) {
 }
 
 function resolveKeyBlockerPath() {
+  const isWindows = process.platform === 'win32';
+  const executable = isWindows ? 'KeyBlocker.exe' : 'KeyBlocker';
+  
   const candidates = app.isPackaged
     ? [
-        path.join(process.resourcesPath, 'KeyBlocker.exe'),
-        path.join(process.resourcesPath, 'app.asar.unpacked', 'KeyBlocker.exe'),
-        path.join(__dirname, 'KeyBlocker.exe')
+        path.join(process.resourcesPath, executable),
+        path.join(process.resourcesPath, 'app.asar.unpacked', executable),
+        path.join(__dirname, executable)
       ]
-    : [path.join(__dirname, 'KeyBlocker.exe')];
+    : [path.join(__dirname, executable)];
 
   return candidates.find((candidatePath) => fs.existsSync(candidatePath));
 }
@@ -54,17 +56,22 @@ function resolveKeyBlockerPath() {
 function startKeyBlocker() {
   if (keyBlockerProcess) return;
   
+  if (process.platform !== 'win32' && process.platform !== 'darwin') {
+    console.log('KeyBlocker not supported on this platform');
+    return;
+  }
+  
   try {
     const keyBlockerPath = resolveKeyBlockerPath();
     if (!keyBlockerPath) {
-      console.error('KeyBlocker.exe not found in expected locations');
+      console.error('KeyBlocker executable not found in expected locations');
       return;
     }
 
     keyBlockerProcess = spawn(keyBlockerPath, [], {
       detached: true,
       stdio: 'ignore',
-      windowsHide: true
+      windowsHide: process.platform === 'win32'
     });
 
     keyBlockerProcess.on('error', (err) => {
@@ -77,23 +84,26 @@ function startKeyBlocker() {
     });
     
     keyBlockerProcess.unref();
-    console.log('KeyBlocker started');
+    console.log(`KeyBlocker started on ${process.platform}`);
     
     setTimeout(() => {
       sendKeyBlockerCommand('UNBLOCK');
-      console.log('Initial state: Windows key UNBLOCKED');
+      const keyName = process.platform === 'win32' ? 'Windows key' : 'Command key';
+      console.log(`Initial state: ${keyName} UNBLOCKED`);
     }, 1500);
   } catch (err) {
     console.error('Error starting KeyBlocker:', err.message);
   }
 }
 
-function blockWindowsKey(enable) {
+function blockKeyboardShortcuts(enable) {
   if (enable) {
-    console.log('Sending BLOCK command to KeyBlocker');
+    const keyName = process.platform === 'win32' ? 'Windows key' : 'Command key';
+    console.log(`Sending BLOCK command to KeyBlocker (${keyName})`);
     sendKeyBlockerCommand('BLOCK');
   } else {
-    console.log('Sending UNBLOCK command to KeyBlocker');
+    const keyName = process.platform === 'win32' ? 'Windows key' : 'Command key';
+    console.log(`Sending UNBLOCK command to KeyBlocker (${keyName})`);
     sendKeyBlockerCommand('UNBLOCK');
   }
 }
@@ -117,6 +127,21 @@ function startServer() {
   });
   
   return new Promise(resolve => setTimeout(resolve, 2000));
+}
+
+function startAutoUpdater() {
+  if (!app.isPackaged) {
+    return;
+  }
+
+  autoUpdater.autoDownload = true;
+  autoUpdater.autoInstallOnAppQuit = true;
+
+  autoUpdater.on('error', (err) => {
+    console.error('AutoUpdater error:', err == null ? 'unknown' : err.message);
+  });
+
+  autoUpdater.checkForUpdatesAndNotify();
 }
 
 function createLoginWindow() {
@@ -267,22 +292,21 @@ function createMainWindow(role, data = {}) {
           event.preventDefault();
         }
       }
-      if (input.control && input.key.toLowerCase() === 'm') {
-        mainWindow.minimize();
-        event.preventDefault();
-      }
+      // if (input.control && input.key.toLowerCase() === 'm') {
+      //   mainWindow.minimize();
+      //   event.preventDefault();
+      // }
     });
 
     ipcMain.on('set-student-lock', (event, locked) => {
       isLocked = locked;
       console.log(`Student window lock set to: ${isLocked}`);
 
-      blockWindowsKey(locked);
+      blockKeyboardShortcuts(locked);
       
       if (locked) {
         mainWindow.setFullScreen(true);
         mainWindow.setAlwaysOnTop(true);
-        // Don't use auto-focus interval - it interferes with blur event detection
       } else {
         mainWindow.setAlwaysOnTop(false);
         mainWindow.setFullScreen(false);
@@ -325,7 +349,7 @@ ipcMain.on('return-to-login', (event) => {
       mainWindow.setResizable(true);
       
       // Unblock keyboard if it was locked
-      blockWindowsKey(false);
+      blockKeyboardShortcuts(false);
       
       // Reset size and position
       mainWindow.setSize(500, 600);
@@ -353,6 +377,7 @@ ipcMain.on('start-app', async (event, data) => {
 });
 
 app.whenReady().then(() => {
+  startAutoUpdater();
   startServer();
   startKeyBlocker();
   createLoginWindow();
@@ -372,7 +397,7 @@ app.on('window-all-closed', () => {
 
 app.on('before-quit', () => {
   app.isQuitting = true;
-  blockWindowsKey(false); 
+  blockKeyboardShortcuts(false); 
   if (serverProcess) {
     serverProcess.kill();
   }
