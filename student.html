@@ -362,8 +362,12 @@
             injectStyles();
             
             // Try again after iframe loads
-            if (calc.contentWindow) {
-                calc.contentWindow.addEventListener('load', injectStyles, false);
+            try {
+                if (calc.contentWindow) {
+                    calc.contentWindow.addEventListener('load', injectStyles, false);
+                }
+            } catch (e) {
+                // cross-origin iframe, ignore
             }
             
             // Keep trying

@@ -299,28 +299,27 @@
                     errorEl.textContent = 'Cannot connect to server';
                 }
             }, 5000);
-        
-        
+        }
+
         function validateAndJoin(code, studentName, errorEl) {
             console.log('Validating class code:', code);
-            
-            socket.emit('validate-class-code', code, (isValid) => {
-                console.log('Validation result:', isValid);
-                
-                if (isValid) {
-                    // Class exists and teacher is hosting it
-                    ipcRenderer.send('start-app', { 
-                        role: 'student', 
+
+            socket.emit('validate-class-code', { code, studentName }, (result) => {
+                console.log('Validation result:', result);
+
+                if (result && result.valid) {
+                    ipcRenderer.send('start-app', {
+                        role: 'student',
                         code: code,
                         studentName: studentName,
                         serverAddress: serverAddress
                     });
                 } else {
-                    errorEl.textContent = 'Class code does not exist or teacher is not online';
+                    errorEl.textContent = (result && result.message) || 'Class code does not exist or teacher is not online';
                 }
             });
         }
-        
+
         // Handle Enter key in student code input
         document.addEventListener('DOMContentLoaded', () => {
             const studentInput = document.getElementById('student-code');
@@ -330,19 +329,18 @@
                         joinClass();
                     }
                 });
-                
+
                 // Auto-uppercase input
                 studentInput.addEventListener('input', (e) => {
                     e.target.value = e.target.value.toUpperCase();
                 });
             }
         });
-        
+
         // Initialize socket when page loads
         window.addEventListener('load', () => {
             setTimeout(initSocket, 500);
         });
-    }
     </script>
 </body>
 </html>

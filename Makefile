@@ -1,7 +1,7 @@
 CXX = g++
 SWIFTC = swiftc
 CXXFLAGS = -O2 -Wall
-LDFLAGS = -lws2_32 -luser32 -lkernel32 -mwindows
+LDFLAGS = -static -static-libgcc -static-libstdc++ -lws2_32 -luser32 -lkernel32 -mwindows
 WIN_TARGET = KeyBlocker.exe
 MAC_TARGET = KeyBlocker
 WIN_SOURCES = KeyBlocker.cpp

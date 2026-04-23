@@ -27,9 +27,14 @@ LRESULT CALLBACK KeyboardProc(int nCode, WPARAM wParam, LPARAM lParam) {
     if (nCode >= 0 && blockingEnabled) {
         KBDLLHOOKSTRUCT* pKbdStruct = (KBDLLHOOKSTRUCT*)lParam;
         
-        if ((pKbdStruct->vkCode == 0x5B || pKbdStruct->vkCode == 0x5C) &&
+        DWORD vk = pKbdStruct->vkCode;
+        bool isWinKey = (vk == 0x5B || vk == 0x5C);
+        bool isAltKey = (vk == VK_LMENU || vk == VK_RMENU || vk == VK_MENU);
+        bool altHeld  = (pKbdStruct->flags & LLKHF_ALTDOWN) != 0;
+
+        if ((isWinKey || isAltKey || altHeld) &&
             (wParam == WM_KEYDOWN || wParam == WM_SYSKEYDOWN)) {
-            Log("Blocked Windows key");
+            Log("Blocked Windows/Alt key");
             return 1;
         }
     }
@@ -56,6 +61,9 @@ void ListenThread() {
         Log("Socket creation failed");
         return;
     }
+
+    int reuse = 1;
+    setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, (const char*)&reuse, sizeof(reuse));
 
     struct sockaddr_in addr;
     addr.sin_family = AF_INET;

@@ -32,6 +32,8 @@
             flex: 1;
             display: flex;
             flex-direction: column;
+            min-height: 0;
+            overflow: hidden;
         }
         
         .header {
@@ -50,6 +52,7 @@
             font-size: 24px;
             font-weight: bold;
             letter-spacing: 3px;
+            text-align: center;
         }
         
         .student-count {
@@ -61,6 +64,8 @@
             flex: 1;
             position: relative;
             padding: 20px;
+            min-height: 0;
+            overflow: hidden;
         }
         
         .activity-console {
@@ -237,11 +242,8 @@
             <button class="control-btn btn-success" onclick="clearAllStudents()">
                 Clear All Students
             </button> -->
-            <button class="control-btn btn-danger" onclick="lockAllStudents()">
-                Lock All Students
-            </button>
-            <button class="control-btn btn-success" onclick="unlockAllStudents()">
-                Unlock All Students
+            <button class="control-btn btn-danger" id="lock-toggle-btn" onclick="toggleLock()">
+                <span id="lock-icon"></span> Lock All Students
             </button>
         </div>
     </div>
@@ -272,6 +274,30 @@
         let socket = null;
         let classCode = '';
         let students = [];
+        let allLocked = false;
+
+        function toggleLock() {
+            allLocked = !allLocked;
+            const btn = document.getElementById('lock-toggle-btn');
+            const icon = document.getElementById('lock-icon');
+            if (allLocked) {
+                icon.textContent = '';
+                btn.textContent = '';
+                btn.appendChild(icon);
+                btn.appendChild(document.createTextNode(' Unlock All Students'));
+                btn.classList.remove('btn-danger');
+                btn.classList.add('btn-success');
+                lockAllStudents();
+            } else {
+                icon.textContent = '';
+                btn.textContent = '';
+                btn.appendChild(icon);
+                btn.appendChild(document.createTextNode(' Lock All Students'));
+                btn.classList.remove('btn-success');
+                btn.classList.add('btn-danger');
+                unlockAllStudents();
+            }
+        }
         
         // Display local IP addresses for students to connect to
         function displayServerAddress() {
@@ -308,13 +334,20 @@
                 console.log('[TEACHER] Students updated:', students);
                 if (data.student) {
                     logToConsole(`${data.student.name} joined the class`, 'info');
+                    if (allLocked) {
+                        socket.emit('send-to-student', {
+                            studentId: data.student.id,
+                            command: { type: 'lock-calculator' }
+                        });
+                    }
                 }
             });
             
             socket.on('student-left', (data) => {
+                const departed = students.find(s => s.id === data.studentId);
                 students = data.allStudents || [];
                 updateStudentList();
-                logToConsole(`Student left the class`, 'warning');
+                logToConsole(`${departed?.name || data.studentName || 'Student'} left the class`, 'warning');
             });
 
             // Student activity (focus loss etc.)
@@ -368,12 +401,25 @@
                 return;
             }
             
-            listEl.innerHTML = students.map(student => `
-                <div class="student-item" data-student-id="${student.id}" oncontextmenu="showStudentMenu(event, '${student.id}', '${student.name}')">
-                    <span class="student-name">${student.name}</span>
-                    <span class="student-status"></span>
-                </div>
-            `).join('');
+            listEl.innerHTML = '';
+            students.forEach(student => {
+                const item = document.createElement('div');
+                item.className = 'student-item';
+                item.dataset.id = student.id;
+                item.dataset.name = student.name;
+                item.addEventListener('contextmenu', (e) => showStudentMenu(e, item));
+
+                const nameSpan = document.createElement('span');
+                nameSpan.className = 'student-name';
+                nameSpan.textContent = student.name;
+
+                const statusSpan = document.createElement('span');
+                statusSpan.className = 'student-status';
+
+                item.appendChild(nameSpan);
+                item.appendChild(statusSpan);
+                listEl.appendChild(item);
+            });
         }
         
         function logToConsole(message, type = 'info') {
@@ -385,8 +431,15 @@
             const timestamp = new Date().toLocaleTimeString();
             const entry = document.createElement('div');
             entry.className = `console-entry console-${type}`;
-            entry.innerHTML = `<span class="console-timestamp">[${timestamp}]</span>${message}`;
+            const ts = document.createElement('span');
+            ts.className = 'console-timestamp';
+            ts.textContent = `[${timestamp}]`;
+            entry.appendChild(ts);
+            entry.appendChild(document.createTextNode(message));
             consoleDiv.appendChild(entry);
+            if (consoleDiv.children.length > 200) {
+                consoleDiv.removeChild(consoleDiv.firstChild);
+            }
             consoleDiv.scrollTop = consoleDiv.scrollHeight;
             console.log(`[${type}] ${message}`);
         }
@@ -442,25 +495,27 @@
             });
         }
         
-        function showStudentMenu(event, studentId, studentName) {
+        function showStudentMenu(event, el) {
             event.preventDefault();
+            const studentId = el.dataset.id;
+            const studentName = el.dataset.name;
             const contextMenu = document.getElementById('context-menu');
-            
-            contextMenu.innerHTML = `
-                <div class="context-menu-item" onclick="lockStudent('${studentId}', '${studentName}')">
-                    Lock Student
-                </div>
-                <div class="context-menu-item" onclick="unlockStudent('${studentId}', '${studentName}')">
-                    Unlock Student
-                </div>
-                <div class="context-menu-item" onclick="clearStudent('${studentId}', '${studentName}')">
-                    Clear Calculator
-                </div>
-                <div class="context-menu-item danger" onclick="kickStudent('${studentId}', '${studentName}')">
-                    Kick Student
-                </div>
-            `;
-            
+
+            contextMenu.innerHTML = '';
+            const items = [
+                { label: 'Lock Student',     fn: () => lockStudent(studentId, studentName) },
+                { label: 'Unlock Student',   fn: () => unlockStudent(studentId, studentName) },
+                { label: 'Clear Calculator', fn: () => clearStudent(studentId, studentName) },
+                { label: 'Kick Student',     fn: () => kickStudent(studentId, studentName), danger: true },
+            ];
+            items.forEach(({ label, fn, danger }) => {
+                const item = document.createElement('div');
+                item.className = 'context-menu-item' + (danger ? ' danger' : '');
+                item.textContent = label;
+                item.addEventListener('click', fn);
+                contextMenu.appendChild(item);
+            });
+
             contextMenu.classList.add('show');
             contextMenu.style.left = event.clientX + 'px';
             contextMenu.style.top = event.clientY + 'px';

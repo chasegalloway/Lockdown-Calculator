@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, globalShortcut } = require('electron');
+const { app, BrowserWindow, ipcMain, globalShortcut, screen } = require('electron');
 const { spawn } = require('child_process');
 const net = require('net');
 const path = require('path');
@@ -186,6 +186,7 @@ function createMainWindow(role, data = {}) {
   mainWindow.setMenuBarVisibility(false);
 
   mainWindow.webContents.on('did-finish-load', () => {
+    if (!mainWindow) return;
     if (role === 'teacher') {
       mainWindow.webContents.send('init-teacher', {
         classCode: data.code,
@@ -205,12 +206,23 @@ function createMainWindow(role, data = {}) {
     let focusInterval = null;
     let wasFocused = true;
 
+    // Remove stale handlers from any previous student session
+    ipcMain.removeAllListeners('set-student-lock');
+
     mainWindow.on('close', (e) => {
-      if (!app.isQuitting && isLocked) {
+      if (!app.isQuitting && isLocked && mainWindow.isFullScreen()) {
         e.preventDefault();
         mainWindow.webContents.executeJavaScript(`
           alert('This window is locked. Please ask your teacher to unlock it first.');
         `);
+      }
+    });
+
+    mainWindow.on('closed', () => {
+      mainWindow = null;
+      if (!app.isQuitting) {
+        app.isQuitting = true;
+        app.quit();
       }
     });
 
@@ -266,6 +278,12 @@ function createMainWindow(role, data = {}) {
       }
     });
 
+    mainWindow.webContents.on('will-prevent-unload', (event) => {
+      if (!isLocked) {
+        event.preventDefault();
+      }
+    });
+
     mainWindow.webContents.on('will-navigate', (event, url) => {
       if (isLocked && !url.includes('localhost') && !url.includes('desmos.com') && !url.includes('file://')) {
         event.preventDefault();
@@ -288,7 +306,7 @@ function createMainWindow(role, data = {}) {
         if (input.key === 'F11') {
           event.preventDefault();
         }
-        if (input.key === 'Escape' && mainWindow.isFullScreen()) {
+        if (input.key === 'Escape' && mainWindow && mainWindow.isFullScreen()) {
           event.preventDefault();
         }
       }
@@ -305,11 +323,26 @@ function createMainWindow(role, data = {}) {
       blockKeyboardShortcuts(locked);
       
       if (locked) {
-        mainWindow.setFullScreen(true);
-        mainWindow.setAlwaysOnTop(true);
+        // Bring window to front regardless of what the student is doing
+        if (mainWindow.isMinimized()) mainWindow.restore();
+        mainWindow.show();
+        mainWindow.moveTop();
+        mainWindow.focus();
+
+        // Move to primary display so fullscreen covers the right screen
+        const primaryDisplay = screen.getPrimaryDisplay();
+        mainWindow.setBounds(primaryDisplay.bounds);
+
+        // Short delay to let the window settle on the correct display before fullscreening
+        setTimeout(() => {
+          if (!mainWindow) return;
+          mainWindow.setFullScreen(true);
+          mainWindow.setAlwaysOnTop(true, 'screen-saver');
+        }, 150);
       } else {
         mainWindow.setAlwaysOnTop(false);
         mainWindow.setFullScreen(false);
+        mainWindow.focus();
 
         if (focusInterval) {
           clearInterval(focusInterval);
@@ -320,7 +353,7 @@ function createMainWindow(role, data = {}) {
   }
 
   if (loginWindow) {
-    loginWindow.close();
+    loginWindow.destroy();
     loginWindow = null;
   }
 }
@@ -347,21 +380,29 @@ ipcMain.on('return-to-login', (event) => {
       mainWindow.setAlwaysOnTop(false);
       mainWindow.setMovable(true);
       mainWindow.setResizable(true);
-      
+
       // Unblock keyboard if it was locked
       blockKeyboardShortcuts(false);
-      
+
       // Reset size and position
       mainWindow.setSize(500, 600);
       mainWindow.center();
-      
+
       // Clear any student-specific state
       isStudentMode = false;
-      
+      app.isQuitting = false;
+
+      // Hand off to loginWindow so createMainWindow can cleanly destroy it
+      // after a new window exists (avoids window-all-closed firing mid-transition).
+      // Remove the student close handler first so it doesn't interfere.
+      mainWindow.removeAllListeners();
+      loginWindow = mainWindow;
+      mainWindow = null;
+
       console.log('[MAIN] Loading login.html...');
-      mainWindow.loadFile('login.html');
-      mainWindow.show();
-      mainWindow.focus();
+      loginWindow.loadFile('login.html');
+      loginWindow.show();
+      loginWindow.focus();
       console.log('[MAIN] Window reset to login page');
     } catch (err) {
       console.error('[MAIN] Error during return-to-login:', err);

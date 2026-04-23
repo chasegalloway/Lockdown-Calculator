@@ -58,26 +58,39 @@ io.on('connection', (socket) => {
   });
 
   // Validate if a class code exists and teacher is online
-  socket.on('validate-class-code', (classCode, callback) => {
+  socket.on('validate-class-code', (data, callback) => {
+    const classCode = typeof data === 'string' ? data : data.code;
+    const studentName = typeof data === 'object' ? data.studentName : null;
+
     const session = sessions.get(classCode);
-    
+
     if (!session) {
       console.log(`Validation failed: class ${classCode} not found`);
-      callback(false);
+      callback({ valid: false, message: 'Class code does not exist or teacher is not online' });
       return;
     }
-    
-    // Check if teacher is still connected
+
     const teacherSocket = io.sockets.sockets.get(session.teacherId);
     if (!teacherSocket) {
       console.log(`Validation failed: teacher for class ${classCode} is disconnected`);
       sessions.delete(classCode);
-      callback(false);
+      callback({ valid: false, message: 'Teacher is not currently hosting this class' });
       return;
     }
-    
+
+    if (studentName) {
+      const isDuplicate = session.students.some(
+        s => s.name.toLowerCase() === studentName.toLowerCase()
+      );
+      if (isDuplicate) {
+        console.log(`Validation failed: name "${studentName}" already taken in class ${classCode}`);
+        callback({ valid: false, message: 'That name is already taken in this class' });
+        return;
+      }
+    }
+
     console.log(`Validation successful: class ${classCode} is active`);
-    callback(true);
+    callback({ valid: true });
   });
 
   // Student joins a class
@@ -98,6 +111,17 @@ io.on('connection', (socket) => {
       console.log(`Student join rejected: teacher disconnected for class ${classCode}`);
       socket.emit('join-error', { message: 'Teacher is not currently hosting this class' });
       sessions.delete(classCode);
+      return;
+    }
+
+    // Safety net: reject duplicate names
+    const nameToUse = studentName || `Student ${session.students.length + 1}`;
+    const isDuplicate = session.students.some(
+      s => s.name.toLowerCase() === nameToUse.toLowerCase()
+    );
+    if (isDuplicate) {
+      console.log(`Student join rejected: name "${nameToUse}" already taken in class ${classCode}`);
+      socket.emit('join-error', { message: 'That name is already taken in this class' });
       return;
     }
 
@@ -265,6 +289,7 @@ io.on('connection', (socket) => {
         session.students = session.students.filter(s => s.id !== socket.id);
         io.to(session.teacherId).emit('student-left', {
           studentId: socket.id,
+          studentName: user.name,
           totalStudents: session.students.length,
           allStudents: session.students
         });
