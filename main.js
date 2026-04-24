@@ -1,5 +1,5 @@
 const { app, BrowserWindow, ipcMain, globalShortcut, screen } = require('electron');
-const { spawn } = require('child_process');
+const { spawn, exec } = require('child_process');
 const net = require('net');
 const path = require('path');
 const fs = require('fs');
@@ -11,6 +11,8 @@ let serverProcess;
 let keyBlockerProcess;
 let currentClassCode = null;
 let isStudentMode = false;
+let overlayWindows = [];
+let killInterval = null;
 
 const userDataPath = path.join(app.getPath('appData'), 'lockdown-calculator');
 app.setPath('userData', userDataPath);
@@ -69,7 +71,6 @@ function startKeyBlocker() {
     }
 
     keyBlockerProcess = spawn(keyBlockerPath, [], {
-      detached: true,
       stdio: 'ignore',
       windowsHide: process.platform === 'win32'
     });
@@ -323,6 +324,9 @@ function createMainWindow(role, data = {}) {
       blockKeyboardShortcuts(locked);
       
       if (locked) {
+        // Prevent screen capture
+        mainWindow.setContentProtection(true);
+
         // Bring window to front regardless of what the student is doing
         if (mainWindow.isMinimized()) mainWindow.restore();
         mainWindow.show();
@@ -333,16 +337,57 @@ function createMainWindow(role, data = {}) {
         const primaryDisplay = screen.getPrimaryDisplay();
         mainWindow.setBounds(primaryDisplay.bounds);
 
+        // Cover every other monitor with a black overlay so students can't use them
+        overlayWindows.forEach(w => { try { w.close(); } catch (e) {} });
+        overlayWindows = screen.getAllDisplays()
+          .filter(d => d.id !== primaryDisplay.id)
+          .map(d => {
+            const overlay = new BrowserWindow({
+              x: d.bounds.x,
+              y: d.bounds.y,
+              width: d.bounds.width,
+              height: d.bounds.height,
+              frame: false,
+              alwaysOnTop: true,
+              skipTaskbar: true,
+              resizable: false,
+              movable: false,
+              focusable: false,
+              backgroundColor: '#000000',
+              webPreferences: { nodeIntegration: false, contextIsolation: true }
+            });
+            overlay.loadURL('about:blank');
+            overlay.setAlwaysOnTop(true, 'screen-saver');
+            return overlay;
+          });
+
         // Short delay to let the window settle on the correct display before fullscreening
         setTimeout(() => {
           if (!mainWindow) return;
           mainWindow.setFullScreen(true);
           mainWindow.setAlwaysOnTop(true, 'screen-saver');
         }, 150);
+
+        // Kill escape-route processes every 500ms using Windows built-in taskkill
+        if (process.platform === 'win32') {
+          killInterval = setInterval(() => {
+            exec('taskkill /f /im Taskmgr.exe /im ProcessHacker.exe /im procexp.exe /im procexp64.exe 2>nul', () => {});
+          }, 500);
+        }
       } else {
+        mainWindow.setContentProtection(false);
         mainWindow.setAlwaysOnTop(false);
         mainWindow.setFullScreen(false);
         mainWindow.focus();
+
+        // Remove secondary-monitor overlays
+        overlayWindows.forEach(w => { try { w.close(); } catch (e) {} });
+        overlayWindows = [];
+
+        if (killInterval) {
+          clearInterval(killInterval);
+          killInterval = null;
+        }
 
         if (focusInterval) {
           clearInterval(focusInterval);
@@ -383,6 +428,10 @@ ipcMain.on('return-to-login', (event) => {
 
       // Unblock keyboard if it was locked
       blockKeyboardShortcuts(false);
+
+      // Close any secondary-monitor overlays
+      overlayWindows.forEach(w => { try { w.close(); } catch (e) {} });
+      overlayWindows = [];
 
       // Reset size and position
       mainWindow.setSize(500, 600);
@@ -438,7 +487,14 @@ app.on('window-all-closed', () => {
 
 app.on('before-quit', () => {
   app.isQuitting = true;
-  blockKeyboardShortcuts(false); 
+  blockKeyboardShortcuts(false);
+  overlayWindows.forEach(w => { try { w.close(); } catch (e) {} });
+  overlayWindows = [];
+  if (killInterval) { clearInterval(killInterval); killInterval = null; }
+  if (keyBlockerProcess) {
+    keyBlockerProcess.kill();
+    keyBlockerProcess = null;
+  }
   if (serverProcess) {
     serverProcess.kill();
   }
