@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, globalShortcut, screen } = require('electron');
+const { app, BrowserWindow, ipcMain, globalShortcut, screen, dialog, Notification } = require('electron');
 const { spawn, exec } = require('child_process');
 const net = require('net');
 const path = require('path');
@@ -139,7 +139,28 @@ function startAutoUpdater() {
   autoUpdater.autoInstallOnAppQuit = true;
 
   autoUpdater.on('error', (err) => {
-    console.error('AutoUpdater error:', err == null ? 'unknown' : err.message);
+    const message = err == null ? 'Unknown error' : err.message;
+    console.error('AutoUpdater error:', message);
+    // Show non-blocking notification so it doesn't interrupt class setup
+    if (Notification.isSupported()) {
+      new Notification({
+        title: 'Update Failed',
+        body: `Could not update Lockdown Calculator. Check your internet connection.\n(${message})`
+      }).show();
+    } else {
+      dialog.showErrorBox('Update Failed',
+        `Could not update Lockdown Calculator.\n\nCheck your internet connection and try restarting.\n\n${message}`
+      );
+    }
+  });
+
+  autoUpdater.on('update-downloaded', () => {
+    if (Notification.isSupported()) {
+      new Notification({
+        title: 'Update Ready',
+        body: 'A new version of Lockdown Calculator will be installed when you close the app.'
+      }).show();
+    }
   });
 
   autoUpdater.checkForUpdatesAndNotify();
